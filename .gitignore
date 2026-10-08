@@ -1,0 +1,7 @@
+# Fotos der echten Figuren bleiben lokal
+Bilder/
+fotos.js
+Uebersicht_Modelle.html
+# Testausgaben
+tools/out/
+.DS_Store

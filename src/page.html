@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tau Figuren 3D</title>
+<style>
+:root{--bg:#efece6;--panel:#fbfaf7;--fg:#1f1f22;--mut:#6b6a66;--line:#dcd8cf;--acc:#b5402b;--accfg:#fff;--stage1:#ebe7de;--stage2:#cdc7ba}
+@media (prefers-color-scheme:dark){:root{--bg:#151517;--panel:#1f1f23;--fg:#ececec;--mut:#9a9aa0;--line:#33333a;--acc:#e0705a;--accfg:#1a1a1a;--stage1:#2c2c32;--stage2:#121214}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+.app{display:grid;grid-template-columns:250px 1fr 290px;height:100vh}
+aside.list{border-right:1px solid var(--line);overflow:auto;padding:14px 10px;background:var(--panel)}
+aside.list h1{font-size:16px;margin:2px 8px 12px}
+.item{display:flex;gap:10px;align-items:center;width:100%;padding:8px;margin-bottom:4px;border:1px solid transparent;border-radius:10px;background:none;color:inherit;text-align:left;cursor:pointer;font:inherit}
+.item:hover{background:var(--bg)}
+.item.on{border-color:var(--acc);background:var(--bg)}
+.item img{width:44px;height:44px;object-fit:cover;border-radius:8px;flex:none}
+.item b{display:block;font-size:13px;font-weight:600}
+.item span{font-size:12px;color:var(--mut)}
+main{position:relative;background:radial-gradient(ellipse at 50% 40%,var(--stage1),var(--stage2));min-width:0;overflow:hidden}
+main canvas{display:block;width:100%;height:100%;touch-action:none}
+.tools{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:max-content;max-width:calc(100% - 32px)}
+.tools button{font:inherit;padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer}
+.tools button.primary{background:var(--acc);color:var(--accfg);border-color:var(--acc)}
+.anim{position:absolute;top:36px;left:50%;transform:translateX(-50%);display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--panel)}
+.anim button{font:inherit;padding:7px 14px;border:0;background:none;color:var(--fg);cursor:pointer}
+.anim button.on{background:var(--acc);color:var(--accfg)}
+.anim button:disabled{opacity:.4;cursor:default}
+.tools label{display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel);cursor:pointer}
+.hint{position:absolute;top:12px;left:0;right:0;text-align:center;color:var(--mut);font-size:12px;pointer-events:none}
+aside.info{border-left:1px solid var(--line);overflow:auto;padding:18px 16px;background:var(--panel)}
+aside.info h2{font-size:17px;margin:0 0 6px}
+aside.info p{color:var(--mut);margin:0 0 14px}
+aside.info h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:18px 0 8px}
+.photos{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.photos figure{margin:0}
+.photos img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;cursor:zoom-in;display:block}
+.photos figcaption{font-size:11px;color:var(--mut);text-align:center;margin-top:2px}
+.lb{position:fixed;inset:0;background:rgba(0,0,0,.82);display:none;align-items:center;justify-content:center;z-index:10;cursor:zoom-out}
+.lb.on{display:flex}.lb img{max-width:92vw;max-height:92vh;border-radius:10px}
+.sheet{--stage1:#ebe7de;--stage2:#cdc7ba;--mut:#555}.sheet .app{display:block}.sheet aside,.sheet .tools,.sheet .hint,.sheet .anim{display:none}.sheet main{position:fixed;inset:0}
+.vlabel{position:absolute;padding:6px 10px;font-size:13px;color:var(--mut)}
+@media (max-width:900px){
+  .app{grid-template-columns:1fr;grid-template-rows:auto 62vh auto;height:auto}
+  aside.list{border-right:0;border-bottom:1px solid var(--line);display:flex;gap:6px;overflow-x:auto;padding:10px 16px}
+  aside.list h1{display:none}.item{width:auto;flex:none;margin:0}.item span{display:none}
+  aside.info{border-left:0;padding:16px}
+}
+</style>
+<script src="fotos.js"></script>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<div class="app">
+  <aside class="list"><h1>Figuren</h1><div id="list"></div></aside>
+  <main id="stage">
+    <div class="hint">Ziehen = drehen · Scrollen/Pinch = zoomen · Rechtsklick = verschieben</div>
+    <div class="anim" id="anim">
+      <button data-a="" class="on">Pose</button><button data-a="Gehen">Gehen</button><button data-a="Schiessen">Schießen</button>
+    </div>
+    <div class="tools">
+      <button id="rot">Auto-Drehen: an</button>
+      <button id="reset">Ansicht zurücksetzen</button>
+      <label><input type="checkbox" id="showBase" checked> Base</label>
+      <label><input type="checkbox" id="fx" checked> Kanten &amp; Wash</label>
+      <button id="glb">GLB mit Rig &amp; Animationen</button>
+      <button id="stl" class="primary">STL (Standmodell)</button>
+    </div>
+  </main>
+  <aside class="info">
+    <h2 id="title"></h2>
+    <p id="desc"></p>
+    <h3>Referenzfotos</h3>
+    <div class="photos" id="photos"></div>
+  </aside>
+</div>
+<div class="lb" id="lb"><img alt=""></div>
+
+<script type="module">
+/*@@JS@@*/
+</script>
+</body>
+</html>
