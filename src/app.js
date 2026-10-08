@@ -84,7 +84,8 @@ function show(i) {
   document.getElementById('title').textContent = m.name;
   document.getElementById('desc').textContent = m.desc;
   const ph = document.getElementById('photos'); ph.innerHTML = '';
-  for (const id of m.photos) {
+  document.getElementById('photos').previousElementSibling.hidden = !PHOTOS[m.photos[0]];
+  for (const id of m.photos.filter(id => PHOTOS[id])) {
     const f = document.createElement('figure');
     f.innerHTML = `<img alt="IMG_${id}" src="${PHOTOS[id]}"><figcaption>IMG_${id}</figcaption>`;
     f.querySelector('img').onclick = () => { lb.querySelector('img').src = PHOTOS[id]; lb.classList.add('on'); };
@@ -95,7 +96,7 @@ function show(i) {
 const list = document.getElementById('list');
 MODELS.forEach((m, i) => {
   const b = document.createElement('button'); b.className = 'item';
-  b.innerHTML = `<img alt="" src="${PHOTOS[m.photos[0]]}"><div><b>${m.name}</b><span>${m.sub}</span></div>`;
+  b.innerHTML = `${PHOTOS[m.photos[0]] ? `<img alt="" src="${PHOTOS[m.photos[0]]}">` : ''}<div><b>${m.name}</b><span>${m.sub}</span></div>`;
   b.onclick = () => show(i); list.append(b);
 });
 const lb = document.getElementById('lb'); lb.onclick = () => lb.classList.remove('on');
