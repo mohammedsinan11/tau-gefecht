@@ -7,6 +7,7 @@ TAG=$1; shift
 for spec in "$@"; do
   id=${spec%%:*}; anim=""; [[ "$spec" == *:* ]] && anim=${spec#*:}
   name="$OUT/${TAG}_${id}${anim:+_$anim}.png"; rm -f "$name"
-  "$ROOT/tools/headless.sh" 90 --window-size=1600,1200 --virtual-time-budget=20000 --screenshot="$name" "$F?sheet=$id${anim:+&anim=$anim}" >/dev/null
+  SHOT="$name" SIZE=1600,1200 node "$ROOT/tools/cdp-eval.mjs" "$F?sheet=$id${anim:+&anim=$anim}" \
+    "document.querySelectorAll('.vlabel').length ? new Promise(r => setTimeout(() => r(1), 1500)) : null" 120 >/dev/null
   [ -f "$name" ] && echo "ok    $name" || echo "FEHLT $name"
 done

@@ -108,7 +108,7 @@ const $ = id => document.getElementById(id);
 const cx = k => -BW / 2 + (k + .5) * CELL, cz = m => -BD / 2 + (m + .5) * CELL;
 const cellOf = (x, z) => [Math.floor((x + BW / 2) / CELL), Math.floor((z + BD / 2) / CELL)];
 const anims = new Set();
-function tween(dur, fn) { return new Promise(res => { if (dur <= 0 || G.instant) { fn(1); res(); return; } anims.add({ t: 0, dur, fn, res }); }); }
+function tween(dur, fn) { return new Promise(res => { if (dur <= 0 || G.instant || G.skip) { fn(1); res(); return; } anims.add({ t: 0, dur, fn, res }); }); }
 const wait = s => tween(s, () => {});
 const lerpAng = (a, b, t) => { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return a + d * t; };
 
@@ -293,15 +293,86 @@ function mergeStatic(g) {
   return out;
 }
 const objMarkers = [];
-// Geländevarianten: Standard oder an der Mittellinie gespiegelt (Ziele liegen symmetrisch, Hindernisse wandern)
-const LAYOUT = { groups: [], base: null, mirror: false };
-function setLayout(mirror) {
-  LAYOUT.mirror = mirror; for (const g of LAYOUT.groups) g.scale.x = mirror ? -1 : 1;
-  COLL.length = 0; for (const b of LAYOUT.base) COLL.push(mirror ? { min: [-b.max[0], b.min[1], b.min[2]], max: [-b.min[0], b.max[1], b.max[2]] } : { min: [...b.min], max: [...b.max] });
+// Geländeaufstellungen (alle punktsymmetrisch, damit beide Seiten gleiche Chancen haben), jeweils auch an der Mittellinie
+// gespiegelt spielbar. Gebaut wird eine Aufstellung erst, wenn sie zum ersten Mal gebraucht wird.
+const at0 = (x, z) => [x, 0, z];
+const TERRAINS = {
+  ruinen: { name: 'Ruinenfeld', build(t, deco, R) {
+    decal(deco, -2 * IN, 3.5 * IN, 2.6 * IN, crater); decal(deco, 2 * IN, -3.5 * IN, 2.6 * IN, crater);
+    decal(deco, -15 * IN, -9 * IN, 1.8 * IN, crater, 1); decal(deco, 15 * IN, 9 * IN, 1.8 * IN, crater, 2);
+    decal(deco, 8 * IN, 1 * IN, 1.4 * IN, crater); decal(deco, -8 * IN, -1 * IN, 1.4 * IN, crater);
+    for (const s of [1, -1]) {
+      const P = (x, z) => [s * x * IN, s * z * IN];
+      // große Ruine in der Flanke
+      ruinWall(t, R, P(-17, -3), P(-9, -3), 4.6 * IN, { breakB: .35, win: [[.18, .34], [.48, .62]] });
+      ruinWall(t, R, P(-15, -3.4), P(-15, -9), 3.8 * IN, { breakB: .45, win: [[.3, .5]] });
+      rubble(t, R, ...P(-10, -4.2), 22); rubble(t, R, ...P(-15.2, -9.6), 16, 16);
+      B(t, 8 * IN, 1.2, 6 * IN, '#7c7469', [s * -13 * IN, .6, s * -6.2 * IN], undefined, { round: .6 });   // Bodenplatte
+      // kurze Mauer nahe der Mitte
+      ruinWall(t, R, P(-4, -1.2), P(-4, 3.4), 3 * IN, { breakA: .3, breakB: .3, win: [[.4, .6]] });
+      rubble(t, R, ...P(-4.6, 3.9), 14, 14);
+      // Container vor der eigenen Aufstellungszone
+      container(t, R, s * 2 * IN, s * 6.6 * IN, true, s > 0 ? '#7e4a2a' : '#3e5c58');
+      // Kistenstapel und Fässer
+      crate(t, R, s * -9 * IN, 0, s * 5 * IN); crate(t, R, s * -9 * IN + s * 36, 0, s * 5 * IN + s * 4); crate(t, R, s * -9 * IN + s * 16, 34, s * 5 * IN + s * 2, 30);
+      barrel(t, s * -6.4 * IN, s * 7.6 * IN, '#5a6b3c'); barrel(t, s * -5.6 * IN, s * 8.3 * IN, '#8a3a26'); barrel(t, s * 9.3 * IN, s * -3.2 * IN, '#5a6b3c');
+      // Rohrleitung
+      pipeline(t, s > 0 ? 10 * IN : -16.5 * IN, s > 0 ? 16.5 * IN : -10 * IN, s * 9.2 * IN);
+    }
+  } },
+  // Versorgungsdepot: Container als lange Sichtsperren, dazwischen offene Gassen
+  depot: { name: 'Depot', build(t, deco, R) {
+    decal(deco, 0, 0, 2.2 * IN, crater); decal(deco, -14 * IN, 6 * IN, 1.6 * IN, crater, 1); decal(deco, 14 * IN, -6 * IN, 1.6 * IN, crater, 2);
+    for (const s of [1, -1]) {
+      const P = (x, z) => [s * x * IN, s * z * IN], col = s > 0 ? ['#7e4a2a', '#5b6b3a'] : ['#3e5c58', '#6d6a3a'];
+      container(t, R, ...P(-6, -2.6), true, col[0]);                  // quer vor dem mittleren Ziel
+      container(t, R, ...P(-16, 4.6), false, col[1]);                 // Flanke, längs
+      container(t, R, ...P(7.5, 7.4), true, col[1]);                  // Deckung vor der Aufstellungszone
+      pipeline(t, s > 0 ? 3.5 * IN : -12.5 * IN, s > 0 ? 12.5 * IN : -3.5 * IN, s * -4.8 * IN);
+      crate(t, R, ...at0(...P(-9.5, 6.2))); crate(t, R, s * -9.5 * IN + s * 34, 0, s * 6.4 * IN); crate(t, R, s * -9.5 * IN + s * 17, 34, s * 6.3 * IN, 30);
+      crate(t, R, ...at0(...P(4, 3.4)), 30);
+      barrel(t, ...P(15.6, 0.8), '#8a3a26'); barrel(t, ...P(16.4, 1.6), '#5a6b3c'); barrel(t, ...P(-3, 8.4), '#5a6b3c');
+      ruinWall(t, R, P(11, -9.5), P(16, -9.5), 3.2 * IN, { breakA: .4, win: [[.55, .75]] });
+      rubble(t, R, ...P(10.4, -9), 14, 12);
+    }
+  } },
+  // Trümmerstadt: viele Mauerzüge mit Fenstern – kurze Sichtlinien, Bewegung und Nahkampf zählen mehr
+  stadt: { name: 'Trümmerstadt', build(t, deco, R) {
+    decal(deco, -6 * IN, 0, 1.8 * IN, crater); decal(deco, 6 * IN, 0, 1.8 * IN, crater, 1);
+    for (const s of [1, -1]) {
+      const P = (x, z) => [s * x * IN, s * z * IN];
+      ruinWall(t, R, P(-17.6, -1.5), P(-14.5, -1.5), 4.2 * IN, { breakB: .4, win: [[.3, .55]] });
+      ruinWall(t, R, P(-8.5, -0.6), P(-8.5, 4.2), 4 * IN, { breakA: .35, win: [[.45, .7]] });
+      ruinWall(t, R, P(-8.1, 4.6), P(-4.4, 4.6), 3.2 * IN, { breakB: .5 });
+      ruinWall(t, R, P(1.5, -4.2), P(6.5, -4.2), 3.6 * IN, { breakA: .3, breakB: .3, win: [[.35, .5], [.6, .75]] });
+      ruinWall(t, R, P(13.5, -5.5), P(13.5, -9.5), 4.4 * IN, { breakB: .4, win: [[.2, .45]] });
+      ruinWall(t, R, P(14, -5.2), P(17.6, -5.2), 3.4 * IN, { breakA: .5 });
+      rubble(t, R, ...P(-14, -2.4), 18); rubble(t, R, ...P(-9.4, 4.9), 14, 14); rubble(t, R, ...P(7, -3.4), 16, 14); rubble(t, R, ...P(12.8, -9.8), 14, 12);
+      B(t, 6 * IN, 1.2, 5 * IN, '#7c7469', [s * 15.5 * IN, .6, s * -7.6 * IN], undefined, { round: .6 });
+      crate(t, R, ...at0(...P(-1.5, 8))); crate(t, R, s * -1.5 * IN + s * 34, 0, s * 8.1 * IN);
+      barrel(t, ...P(-12.5, 7.6), '#5a6b3c'); barrel(t, ...P(-11.8, 8.4), '#8a3a26');
+      ruinWall(t, R, P(4, 7.4), P(9, 7.4), 3.8 * IN, { breakB: .3, win: [[.25, .45]] });
+      ruinWall(t, R, P(9.4, 7.8), P(9.4, 10.4), 3.2 * IN, { breakB: .5 });
+      ruinWall(t, R, P(-1.8, 2.3), P(1.8, 2.3), 2.2 * IN, { breakA: .25, breakB: .25 });
+      rubble(t, R, ...P(3.6, 7.9), 12, 12);
+    }
+  } },
+};
+const LAYOUT = { id: null, mirror: false, built: {} };
+function setLayout(id, mirror) {
+  if (!TERRAINS[id]) id = 'ruinen';
+  for (const L of Object.values(LAYOUT.built)) for (const g of L.groups) g.visible = false;
+  const L = LAYOUT.built[id] ??= (() => {
+    const R = rng(77), deco = new THREE.Group(), t = new THREE.Group(); COLL.length = 0;
+    TERRAINS[id].build(t, deco, R);
+    const merged = mergeStatic(t); scene.add(deco, merged);
+    return { groups: [deco, merged], base: COLL.map(b => ({ min: [...b.min], max: [...b.max] })) };
+  })();
+  LAYOUT.id = id; LAYOUT.mirror = mirror; for (const g of L.groups) { g.visible = true; g.scale.x = mirror ? -1 : 1; }
+  COLL.length = 0; for (const b of L.base) COLL.push(mirror ? { min: [-b.max[0], b.min[1], b.min[2]], max: [-b.min[0], b.max[1], b.max[2]] } : { min: [...b.min], max: [...b.max] });
   dirty = true;
 }
 function buildBoard() {
-  const R = rng(77);
   // Tisch und Spielplatte
   const tableTex = canvasTex(512, 512, (x, w, h) => { const r = rng(3); x.fillStyle = '#2a211b'; x.fillRect(0, 0, w, h); for (let i = 0; i < 260; i++) { x.strokeStyle = `rgba(${r() < .5 ? '0,0,0' : '90,70,55'},${.1 + r() * .2})`; x.lineWidth = 1 + r() * 3; const y = r() * h; x.beginPath(); x.moveTo(0, y); x.bezierCurveTo(w * .3, y + (r() - .5) * 20, w * .6, y + (r() - .5) * 20, w, y + (r() - .5) * 10); x.stroke(); } });
   tableTex.wrapS = tableTex.wrapT = THREE.RepeatWrapping; tableTex.repeat.set(4, 4);
@@ -316,31 +387,7 @@ function buildBoard() {
     const f = new THREE.Mesh(new THREE.BoxGeometry(w, 24, d), new THREE.MeshStandardMaterial({ color: 0x1a1816, roughness: .55, metalness: .2 }));
     f.position.set(x, -8, z); f.castShadow = f.receiveShadow = true; f.userData.noFx = true; scene.add(f);
   }
-  const deco = new THREE.Group(); scene.add(deco); LAYOUT.groups.push(deco);
-  decal(deco, -2 * IN, 3.5 * IN, 2.6 * IN, crater); decal(deco, 2 * IN, -3.5 * IN, 2.6 * IN, crater);
-  decal(deco, -15 * IN, -9 * IN, 1.8 * IN, crater, 1); decal(deco, 15 * IN, 9 * IN, 1.8 * IN, crater, 2);
-  decal(deco, 8 * IN, 1 * IN, 1.4 * IN, crater); decal(deco, -8 * IN, -1 * IN, 1.4 * IN, crater);
-  // Gelände (punktsymmetrisch, damit beide Seiten gleiche Chancen haben)
-  const t = new THREE.Group();
-  for (const s of [1, -1]) {
-    const P = (x, z) => [s * x * IN, s * z * IN];
-    // große Ruine in der Flanke
-    ruinWall(t, R, P(-17, -3), P(-9, -3), 4.6 * IN, { breakB: .35, win: [[.18, .34], [.48, .62]] });
-    ruinWall(t, R, P(-15, -3.4), P(-15, -9), 3.8 * IN, { breakB: .45, win: [[.3, .5]] });
-    rubble(t, R, ...P(-10, -4.2), 22); rubble(t, R, ...P(-15.2, -9.6), 16, 16);
-    B(t, 8 * IN, 1.2, 6 * IN, '#7c7469', [s * -13 * IN, .6, s * -6.2 * IN], undefined, { round: .6 });   // Bodenplatte
-    // kurze Mauer nahe der Mitte
-    ruinWall(t, R, P(-4, -1.2), P(-4, 3.4), 3 * IN, { breakA: .3, breakB: .3, win: [[.4, .6]] });
-    rubble(t, R, ...P(-4.6, 3.9), 14, 14);
-    // Container vor der eigenen Aufstellungszone
-    container(t, R, s * 2 * IN, s * 6.6 * IN, true, s > 0 ? '#7e4a2a' : '#3e5c58');
-    // Kistenstapel und Fässer
-    crate(t, R, ...[s * -9 * IN, 0, s * 5 * IN]); crate(t, R, ...[s * -9 * IN + s * 36, 0, s * 5 * IN + s * 4]); crate(t, R, s * -9 * IN + s * 16, 34, s * 5 * IN + s * 2, 30);
-    barrel(t, s * -6.4 * IN, s * 7.6 * IN, '#5a6b3c'); barrel(t, s * -5.6 * IN, s * 8.3 * IN, '#8a3a26'); barrel(t, s * 9.3 * IN, s * -3.2 * IN, '#5a6b3c');
-    // Rohrleitung
-    pipeline(t, s > 0 ? 10 * IN : -16.5 * IN, s > 0 ? 16.5 * IN : -10 * IN, s * 9.2 * IN);
-  }
-  const merged = mergeStatic(t); scene.add(merged); LAYOUT.groups.push(merged); LAYOUT.base = COLL.map(b => ({ min: [...b.min], max: [...b.max] }));
+  setLayout('ruinen', false);
   // Missionsziele: Datenrelais mit Leuchtkern
   OBJ.forEach((o, i) => {
     const g = new THREE.Group(); g.position.set(o.x, 0, o.z); scene.add(g);
@@ -605,7 +652,7 @@ function resolve(att, def, w, c) {
 async function showDice(att, def, res, kind) {
   if (G.instant) return;
   const el = $('dice'), sp = 1 / G.speed;
-  el.innerHTML = `<div class="head">${nameOf(att)} → ${nameOf(def)} · <b>${esc(res.w.n)}</b> <span style="color:var(--mut)">${kind === 'fight' ? 'Nahkampf' : `${fmt(res.ctxD ?? 0)}"`}</span></div>`;
+  el.innerHTML = `<div class="head">${nameOf(att)} → ${nameOf(def)} · <b>${esc(res.w.n)}</b> <span style="color:var(--mut)">${kind === 'fight' ? 'Nahkampf' : `${fmt(res.ctxD ?? 0)}"`}</span><span class="skip" title="Animationen dieser Aktivierung überspringen">⏭ Leertaste</span></div>`;
   el.style.display = 'block';
   const row = async (label, vals, cls, sum) => {
     const r = document.createElement('div'); r.className = 'drow';
@@ -613,9 +660,9 @@ async function showDice(att, def, res, kind) {
     const dd = r.querySelector('.dd'), dice = vals.map(() => { const d = document.createElement('span'); d.className = 'die roll'; d.textContent = d6(); dd.append(d); return d; });
     if (!vals.length) dd.innerHTML = '<span style="color:var(--mut);font-size:12px">–</span>';
     const t0 = performance.now();
-    await tween(.45 * sp, () => { if (performance.now() - t0 > 40) dice.forEach(d => d.textContent = d6()); });
+    await tween(.3 * sp, () => { if (performance.now() - t0 > 40) dice.forEach(d => d.textContent = d6()); });
     dice.forEach((d, i) => { d.className = 'die ' + cls(vals[i]); d.textContent = vals[i]; });
-    r.querySelector('.dr').innerHTML = sum; await wait(.25 * sp);
+    r.querySelector('.dr').innerHTML = sum; await wait(.16 * sp);
   };
   const why = [...res.hn.why, ...(res.rer ? [`${res.rer} wiederholt`] : [])];
   await row(`Treffer ${res.hn.need}+${why.length ? `<br><small>${why.join(', ')}</small>` : ''}`, res.hits, v => v >= res.hn.need ? 'yes' : 'no', `${res.nh} Treffer`);
@@ -718,7 +765,7 @@ async function attack(att, def, kind, retaliation = false, ow = false) {
     if (lost) { def.w -= lost; att.stats.dmg += lost; floatText(def, '−' + lost); updateLabel(def); }
     else if (res.nw) floatText(def, 'gehalten', 'sv');
     else floatText(def, 'verfehlt', 'sv');
-    await wait(.55 / G.speed);
+    await wait(.4 / G.speed);
     if (def.w <= 0) await kill(def, att);
   }
   if (kind === 'fight' && !retaliation) setPos(att, att.x, att.z);
@@ -740,7 +787,7 @@ async function kill(u, by) {
 }
 
 // ---------- Ablauf ----------
-function log(html, cls = '') { if (G.instant) return; const p = document.createElement('p'); p.innerHTML = html; if (cls) p.className = cls; $('log').append(p); $('log').scrollTop = 1e9; }
+function log(html, cls = '') { if (G.trace) G.trace.push(html.replace(/<[^>]+>/g, '')); if (G.instant) return; const p = document.createElement('p'); p.innerHTML = html; if (cls) p.className = cls; $('log').append(p); $('log').scrollTop = 1e9; }
 function banner(txt, col = '#ece8df') { if (G.instant) return; const b = $('banner'); b.textContent = txt; b.style.color = col; b.classList.remove('on'); void b.offsetWidth; b.classList.add('on'); }
 const MISSIONS = {
   vorherrschaft: { name: 'Vorherrschaft', text: 'Jedes gehaltene Missionsziel bringt am Rundenende 2 Punkte. Abschüsse 1 Punkt.' },
@@ -757,7 +804,7 @@ function startGame() {
   updateObjectives(); beginTurn();
 }
 function beginTurn() {
-  G.act = null; clearSel(); setTimeout(() => { G.lastTurn = G.turn; }, 0);
+  G.skip = false; G.act = null; clearSel(); setTimeout(() => { G.lastTurn = G.turn; }, 0);
   if (checkEnd()) return;
   updateHud();
   if (isAI(G.turn)) aiTurn();
@@ -895,7 +942,7 @@ async function reactFire(mover) {
   if (!shooters.length) return;
   const ev = s => { const c = ctx(s); return gunsInRange(s, c).reduce((t, w) => t + expect(s, mover, w, c), 0); };
   let shooter = null;
-  if (isAI(side)) { const [b, v] = shooters.map(s => [s, ev(s)]).sort((x, y) => y[1] - x[1])[0]; if (v >= .45 || v >= mover.w * .4) shooter = b; }
+  if (isAI(side)) { AIS = aiLevel(side); const [b, v] = shooters.map(s => [s, ev(s)]).sort((x, y) => y[1] - x[1])[0]; if (v >= .45 || v >= mover.w * .4) shooter = b; }
   else {
     const wasFollow = G.follow; G.follow = true; follow(mover.x, mover.z); G.follow = wasFollow;
     const hot = G.mode === 'hot', who = hot ? `${TEAMS[side].name}: ` : '';
@@ -1043,9 +1090,39 @@ function handleHover() {
 
 // ---------- Computergegner ----------
 // Bewertet für jede eigene Einheit mögliche Zielpositionen (Schaden, Missionsziele, Gefahr) und führt die beste Aktivierung aus.
-const hard = () => G.diff === 'schwer' && (G.mode === 'ai' || G.instant);
+// KI-Stufe je Seite: 'leicht' | 'normal' | 'schwer' | 'greedy' (Referenz-Skript für Tests); AIS = Stufe der gerade denkenden Seite
+const aiLevel = s => G.aiLvl?.[s] ?? (G.greedy === s ? 'greedy' : G.diff);
+let AIS = 'normal';
+const hard = () => AIS === 'schwer';
 const valueOf = (e, dmg) => dmg * (e.T.pts / e.T.W) / 9 * (dmg >= e.w - .2 ? 1.5 : 1) * (hard() ? 1 + .5 * (1 - e.w / e.T.W) : 1);
+// Schwer: Angriffe nach der vollständigen Schadensverteilung bewerten – ein Abschuss zählt voll, Teilschaden nur anteilig
+// (mehr, wenn noch eine eigene Einheit in dieser Runde nachlegen kann: Fokusfeuer über mehrere Aktivierungen).
+function dmgDist(att, def, ws, c) {
+  const cap = Math.max(1, def.w); let d = new Float64Array(cap + 1); d[0] = 1;
+  for (const w of ws) {
+    let h = pr(hitNeed(att, def, w, c).need); if (c.reroll) h += (1 - h) * h;
+    const p = h * pr(woundNeed(w.S, def.T.T)) * (1 - pr(saveNeed(def, w, c).need));
+    const dd = typeof w.D === 'number' ? [[w.D, 1]] : (([n, b]) => Array.from({ length: n }, (_, i) => [i + 1 + b, 1 / n]))(dParse(w.D));
+    for (let a = attacksOf(w, c); a > 0 && p > 0; a--) {
+      const nd = d.map(v => v * (1 - p));
+      for (let k = 0; k < cap; k++) if (d[k]) for (const [x, q] of dd) nd[Math.min(cap, k + x)] += d[k] * p * q;
+      d = nd;
+    }
+  }
+  return d;
+}
+const AIW = { rstep: 4, dep: .1, spr: 0, kill: 1.5, beta: .5, focus: .25, danger: .32, obj: 1.35, newOff: 1, look: 1, cands: 14, top: 3, thr: .6, vp: 1, mat: 1, wnd: .5, objv: .8 };
+for (const kv of (Q.get('aiw') ?? '').split(',').filter(Boolean)) { const [k, v] = kv.split(':'); AIW[k] = +v; }   // Test: ?aiw=kill:2,beta:.4
+const worth = e => e.T.pts / 9 * 1.5 + killValue(e) * AIW.kill;
+const doneness = (e, x, f) => x <= 0 ? 1 : (AIW.beta + (f ? AIW.focus : 0)) * (1 - x / e.T.W);
+const canFollow = (att, def) => living(att.side).some(f => f !== att && !f.done && (f.T.guns.length ? Math.max(...f.T.guns.map(w => w.r)) + f.T.M : f.T.M + 4) >= gap(f, def));
+function attackGain(att, def, ws, c, d = dmgDist(att, def, ws, c)) {
+  const f = canFollow(att, def); let v = 0;
+  for (let k = 0; k < d.length; k++) v += d[k] * doneness(def, def.w - k, f);
+  return worth(def) * (v - doneness(def, def.w, f));
+}
 function bestOffense(u, p, moved, sprint) {
+  if (hard() && AIW.newOff) return bestOffenseHard(u, p, moved, sprint);
   let best = { v: 0 };
   const eng = engagedAt(u, p);
   if (eng.length) {
@@ -1072,6 +1149,39 @@ function bestOffense(u, p, moved, sprint) {
   }
   return best;
 }
+function bestOffenseHard(u, p, moved, sprint) {
+  let best = { v: 0 };
+  const eng = engagedAt(u, p);
+  if (eng.length) {
+    if (sprint && !u.T.beast) return best;
+    for (const e of eng) {
+      const d = dmgDist(u, e, [u.T.melee], { kind: 'fight', moved }), back = attackGain(e, u, [e.T.melee], { kind: 'fight', retaliation: true });
+      const v = attackGain(u, e, [u.T.melee], null, d) - back * (1 - d[d.length - 1]);
+      if (v > best.v) best = { v, e, k: 'fight' };
+    }
+    return best;
+  }
+  if (sprint) return best;
+  for (const e of living(1 - u.side)) {
+    if (u.T.guns.length) {
+      const c = ctxOf(u, e, 'shoot', p, e, moved); if (!c.vis) continue;
+      const ws = gunsInRange(u, c); if (!ws.length) continue;
+      const v = attackGain(u, e, ws, c);
+      if (v > best.v) best = { v, e, k: 'shoot' };
+    }
+    if (u.T.marker && !e.marked && gapAt(u, p, e) <= 36 && sight(u, e, p).vis) {
+      let v = 0;
+      for (const f of living(u.side)) {
+        if (f === u || f.done || !f.T.guns.length) continue;
+        const c = ctxOf(f, e, 'shoot', f, e, false); if (!c.vis) continue;
+        const ws = gunsInRange(f, c); if (!ws.length) continue;
+        const before = attackGain(f, e, ws, c); e.marked = true; const after = attackGain(f, e, ws, c); e.marked = false; v = Math.max(v, after - before);
+      }
+      if (v > best.v) best = { v, e, k: 'mark' };
+    }
+  }
+  return best;
+}
 function danger(u, p) {
   let s = 0; const ghost = { ...u, x: p.x, z: p.z };
   for (const e of living(1 - u.side)) {
@@ -1082,7 +1192,7 @@ function danger(u, p) {
     }
     if (gapAt(u, p, e) <= reach + 1) s += expect(e, ghost, e.T.melee, { kind: 'fight' }) * (e.T.beast ? 1.3 : .6);
   }
-  return valueOf(u, s) * (G.dangerW ?? (hard() ? .32 : .45)) * (G.round >= ROUNDS ? .3 : 1);
+  return valueOf(u, s) * (hard() ? AIW.danger : .45) * (G.round >= ROUNDS ? .3 : 1);
 }
 function objScore(u, p) {
   let s = 0, near = Infinity;
@@ -1094,45 +1204,128 @@ function objScore(u, p) {
   });
   if (s === 0 && near < Infinity) s -= near * .045;
   if (G.mission === 'durchbruch' && G.round >= 2 && inZone(1 - u.side, p.z)) s += 1.1;
-  return s * (hard() ? 1.35 : 1) * (G.round >= 4 ? 1.25 : 1);
+  return s * (hard() ? AIW.obj : 1) * (G.round >= 4 ? 1.25 : 1);
 }
-function planFor(u, maxMove, sprint, noise = 0) {
+function planFor(u, maxMove, sprint, noise = 0, top = 0, step = 2) {
   const nav = navigate(u, maxMove), startEng = engagedAt(u, u).length > 0;
   const cand = [{ j: -1, p: { x: u.x, z: u.z } }];
-  for (let i = 0; i < NX * NZ; i++) if (nav.ok(i) && (i % NX) % 2 === 0 && Math.floor(i / NX) % 2 === 0) cand.push({ j: i, p: { x: cx(i % NX), z: cz(Math.floor(i / NX)) } });
+  for (let i = 0; i < NX * NZ; i++) if (nav.ok(i) && (i % NX) % step === 0 && Math.floor(i / NX) % step === 0) cand.push({ j: i, p: { x: cx(i % NX), z: cz(Math.floor(i / NX)) } });
   if (sprint) for (const e of living(1 - u.side)) for (let a = 0; a < 12; a++) {     // für Angriffe: Punkte direkt an der gegnerischen Base
     const x = e.x + Math.cos(a * .5236) * (u.r + e.r + IN * .6), z = e.z + Math.sin(a * .5236) * (u.r + e.r + IN * .6), [k, m] = cellOf(x, z), j = m * NX + k;
     if (k >= 0 && m >= 0 && k < NX && m < NZ && nav.ok(j)) cand.push({ j, p: { x: cx(k), z: cz(m) } });
   }
-  let best = null;
+  let best = null; const all = [];
   for (const c of cand) {
     const moved = c.j >= 0, fellBack = startEng && moved;
     const off = fellBack ? { v: 0 } : bestOffense(u, c.p, moved, sprint);
     // Referenz-Skript für Tests (G.greedy = Seite): nur zum Ziel laufen und schießen, Gefahr ignorieren
-    const score = G.greedy === u.side ? off.v * 1.1 + objScore(u, c.p) : off.v * 1.1 + objScore(u, c.p) - danger(u, c.p) + Math.random() * (.05 + noise);
-    if (!best || score > best.score) best = { u, j: c.j, p: c.p, off, score, nav };
+    const score = AIS === 'greedy' ? off.v * 1.1 + objScore(u, c.p) : off.v * 1.1 + objScore(u, c.p) - danger(u, c.p) + Math.random() * (.05 + noise);
+    const pl = { u, j: c.j, p: c.p, off, score, nav };
+    if (top) all.push(pl);
+    if (!best || score > best.score) best = pl;
+  }
+  if (top) {     // mehrere unterschiedliche gute Pläne (anderes Ziel/andere Aktion oder mindestens 4" auseinander) für die Vorausschau
+    all.sort((a, b) => b.score - a.score); best.top = [];
+    for (const pl of all) {
+      if (best.top.length >= top) break;
+      if (best.top.every(q => q.off.e !== pl.off.e || q.off.k !== pl.off.k || Math.hypot(q.p.x - pl.p.x, q.p.z - pl.p.z) > 4 * IN)) best.top.push(pl);
+    }
   }
   return best;
 }
+// ---------- Schwer: Vorausschau ----------
+// Für die besten Kandidaten aller eigenen Einheiten: Ergebnis erwartet ausspielen (Zweige Abschuss / kein Abschuss),
+// dann die für uns schlimmste Antwort des Gegners (je Einheit dessen bester Plan) und die Stellung bewerten.
+function ocNow() {
+  return OBJ.map(o => { const oc = [0, 0]; for (const u of living()) if ((Math.hypot(u.x - o.x, u.z - o.z) - u.r) / IN <= 3) oc[u.side] += u.T.OC; return oc; });
+}
+function evalState(s) {
+  const own = living(s), opp = living(1 - s);
+  if (!opp.length) return 1000; if (!own.length) return -1000;
+  const left = (ROUNDS - G.round + 1) / ROUNDS;
+  let v = (G.vp[s] - G.vp[1 - s]) * AIW.vp;
+  for (const u of G.units) if (u.placed && u.alive) v += (u.side === s ? 1 : -1) * u.T.pts / 10 * AIW.mat * (.35 + .65 * left) * (1 - AIW.wnd * (1 - u.w / u.T.W));
+  ocNow().forEach((oc, i) => { v += Math.sign(oc[s] - oc[1 - s]) * objValue(i) * AIW.objv; });
+  if (G.mission === 'durchbruch' && G.round >= 2) for (const u of living()) if (inZone(1 - u.side, u.z)) v += (u.side === s ? 1 : -1) * AIW.objv * .6;
+  // Tempo: was die noch nicht aktivierten Einheiten beider Seiten in dieser Runde voraussichtlich anrichten können
+  if (AIW.thr) for (const u of G.units) if (u.placed && u.alive && !u.done) v += (u.side === s ? 1 : -1) * AIW.thr * threatOf(u);
+  return v;
+}
+function threatOf(u) {
+  let best = 0;
+  for (const e of living(1 - u.side)) {
+    let g = 0;
+    if (gap(u, e) <= u.T.M + 1) g = attackGain(u, e, [u.T.melee], { kind: 'fight', moved: true }) * (u.T.beast ? 1 : .5);
+    if (u.T.guns.length) {
+      const c = ctxOf(u, e, 'shoot', u, e, true); c.d = Math.max(0, c.d - u.T.M);
+      const ws = gunsInRange(u, c); if (c.vis && ws.length) g = Math.max(g, attackGain(u, e, ws, c));
+    }
+    best = Math.max(best, g);
+  }
+  return best;
+}
+// Plan hypothetisch ausführen: ruft fn() für jeden Ausgang (mit Wahrscheinlichkeit) auf und stellt den Zustand danach wieder her
+function branchPlan(pl, fn) {
+  const u = pl.u, e = pl.off.e, k = pl.off.k, S = G.units.map(o => [o, o.x, o.z, o.w, o.alive, o.done, o.marked]), vp = [...G.vp], fb = G.firstBlood;
+  const back = () => { for (const [o, x, z, w, a, d, m] of S) { o.x = x; o.z = z; o.w = w; o.alive = a; o.done = d; o.marked = m; } G.vp = [...vp]; G.firstBlood = fb; };
+  u.x = pl.p.x; u.z = pl.p.z; u.done = true;
+  if (!e || !pl.off.v) { fn(1); back(); return; }
+  if (k === 'mark') { e.marked = true; fn(1); back(); return; }
+  const c = k === 'fight' ? { kind: 'fight', moved: pl.j >= 0 } : ctxOf(u, e, 'shoot', u, e, pl.j >= 0);
+  const d = dmgDist(u, e, k === 'fight' ? [u.T.melee] : gunsInRange(u, c), c), pk = d[d.length - 1];
+  if (pk > .01) { e.alive = false; G.vp[u.side] += killValue(e) + (G.firstBlood ? 0 : 1); G.firstBlood = true; fn(pk); back(); u.x = pl.p.x; u.z = pl.p.z; u.done = true; }
+  if (pk < .99) {
+    let ed = 0; for (let i = 0; i < d.length - 1; i++) ed += d[i] * i; ed /= Math.max(1e-9, 1 - pk);
+    e.w = Math.max(1, Math.round(e.w - ed));
+    if (k === 'fight') { const r = dmgDist(e, u, [e.T.melee], { kind: 'fight', retaliation: true }); let er = 0; r.forEach((q, i) => er += q * i); if (er >= u.w - .5) u.alive = false; else u.w = Math.max(1, Math.round(u.w - er)); }
+    fn(1 - pk); back();
+  }
+}
+function lookahead(side, plans) {
+  const opp = 1 - side, saveAIS = AIS, saveOC = objMarkers.map(o => o.oc);
+  const setOC = () => ocNow().forEach((oc, i) => objMarkers[i].oc = oc);
+  let best = null;
+  for (const pl of plans) {
+    let val = 0;
+    branchPlan(pl, w => {
+      setOC();
+      const rep = living(opp).filter(o => !o.done);
+      if (!rep.length) { val += w * evalState(side); return; }
+      AIS = 'normal'; let worst = Infinity;
+      for (const o of rep) {
+        const op = planFor(o, o.T.M, false, 0, 0, AIW.rstep);
+        let r = 0; branchPlan(op, w2 => { setOC(); r += w2 * evalState(side); }); setOC();
+        worst = Math.min(worst, r);
+      }
+      AIS = saveAIS; val += w * worst;
+    });
+    pl.look = val;
+    if (!best || val > best.look) best = pl;
+  }
+  objMarkers.forEach((o, i) => o.oc = saveOC[i]); AIS = saveAIS;
+  return best;
+}
 async function aiTurn() {
-  G.busy = true; const side = G.turn;
+  G.busy = true; const side = G.turn; AIS = aiLevel(side);
   setHint(`<b style="color:${TEAMS[side].col}">${TEAMS[side].name}</b> (Computer) überlegt …`);
-  await wait(.35 / G.speed);
+  await wait(.2 / G.speed);
   let plan = null;
-  const noise = G.mode === 'ai' && G.diff === 'leicht' ? 1.6 : 0;
-  for (const u of living(side).filter(u => !u.done)) { const p = planFor(u, u.T.M, false, noise); if (!plan || p.score > plan.score) plan = p; }
+  const noise = AIS === 'leicht' ? 1.6 : 0;
+  const look = hard() && AIW.look, cands = [];
+  for (const u of living(side).filter(u => !u.done)) { const p = planFor(u, u.T.M, false, noise, look ? AIW.top : 0); if (!plan || p.score > plan.score) plan = p; if (look) cands.push(...p.top); }
+  if (look && cands.length > 1) plan = lookahead(side, cands.sort((a, b) => b.score - a.score).slice(0, AIW.cands));
   const u = plan.u;
   G.act = { u, moved: false, sprint: false, startEng: engagedAt(u, u).length > 0, markMode: false, maxMove: u.T.M };
   follow(u.x, u.z);
   selRing.visible = true; selRing.position.set(u.x, .8, u.z); selRing.scale.setScalar(u.r + 6); selRing.material.color.set(TEAMS[side].col);
   showCard(u); dirty = true;
   // Sprint, wenn ein Nahkampf nur so erreichbar ist (Katze) oder ein Missionsziel deutlich näher rückt
-  if (!G.act.startEng && !u.T.noSprint && plan.off.k !== 'fight' && (u.T.beast || (!plan.off.v && Math.random() < .5))) {
+  if (!G.act.startEng && !u.T.noSprint && plan.off.k !== 'fight' && (u.T.beast || (!plan.off.v && ((hard() && AIW.spr) || Math.random() < .5)))) {
     const r = d6(); const sp = planFor(u, u.T.M + r, true);
     if (sp.score > plan.score + .3) { G.act.sprint = true; G.act.maxMove = u.T.M + r; log(`${nameOf(u)} sprintet: W6 = ${r} → ${G.act.maxMove}".`); floatText(u, `+${r}"`, 'sv'); plan = sp; }
   }
   if (plan.j >= 0) {
-    drawNav(plan.nav, TEAMS[side].col); await wait(.45 / G.speed); drawNav(null); selRing.visible = false;
+    drawNav(plan.nav, TEAMS[side].col); await wait(.35 / G.speed); drawNav(null); selRing.visible = false;
     await moveAlong(u, pathTo(u, plan.nav, plan.j)); G.act.moved = true; updateObjectives();
     await reactFire(u); G.busy = true;
     if (!u.alive) { G.busy = false; endActivation(); return; }
@@ -1142,7 +1335,7 @@ async function aiTurn() {
   G.busy = false;
   if (off.e && off.v > 0 && !(G.act.startEng && G.act.moved)) {
     if (off.k === 'mark') G.act.markMode = true;
-    else if (G.cp[side] >= 1 && !(G.mode === 'ai' && G.diff === 'leicht')) {
+    else if (G.cp[side] >= 1 && AIS !== 'leicht') {
       // Taktik wählen, wenn sie spürbar mehr erwarteten Schaden bringt (oder den Abschuss wahrscheinlicher macht)
       const gain = st => { G.act.strat = st; const c = ctxOf(u, off.e, off.k === 'fight' ? 'fight' : 'shoot'); const ws = off.k === 'fight' ? [u.T.melee] : gunsInRange(u, c); const v = ws.reduce((s, w) => s + expect(u, off.e, w, c), 0); G.act.strat = null; return v; };
       const base = gain(null), best = ['reroll', 'ap'].map(st => [st, gain(st) - base]).sort((x, y) => y[1] - x[1])[0];
@@ -1163,11 +1356,12 @@ function homeView(side = 0, dur = 1.2) {
 }
 function startDeploy() {
   G.phase = 'deploy'; homeView(0);
-  setLayout(G.terrain === 'gespiegelt' || (G.terrain === 'zufall' && Math.random() < .5));
+  const ids = Object.keys(TERRAINS), tid = TERRAINS[G.terrain] ? G.terrain : ids[Math.floor(Math.random() * ids.length)];
+  setLayout(tid, Math.random() < .5);
   for (const s of [0, 1]) for (const t of G.lists[s].slice().sort((a, b) => UT[b].pts - UT[a].pts)) G.units.push(makeUnit(t, s));
   const q = [[], []]; for (const u of G.units) q[u.side].push(u);
   G.deployQ = []; while (q[0].length || q[1].length) { if (q[0].length) G.deployQ.push(q[0].shift()); if (q[1].length) G.deployQ.push(q[1].shift()); }
-  log('Aufstellung', 'r'); updateHud(); nextDeploy();
+  log('Aufstellung', 'r'); log(`Gelände: ${TERRAINS[tid].name}${LAYOUT.mirror ? ' (gespiegelt)' : ''}`); updateHud(); nextDeploy();
 }
 async function nextDeploy() {
   const u = G.deployQ[0];
@@ -1184,6 +1378,11 @@ async function nextDeploy() {
       for (const b of COLL) { const d = Math.hypot(x - (b.min[0] + b.max[0]) / 2, z - (b.min[2] + b.max[2]) / 2); if (d < 4 * IN) s += .15; }
       for (const o of G.units) if (o.placed && o.side === u.side) s -= Math.max(0, 4 - dist(o, { x, z }) / IN) * .4;
       if (u.T.guns.length) s += .2 * living(1 - u.side).filter(e => sight(u, e, { x, z }).vis).length;
+      if (aiLevel(u.side) === 'schwer' && AIW.dep) {   // Schwer: aus der Sicht der gegnerischen Zone bleiben, nah an den Zielen
+        const ez = (u.side ? 1 : -1) * (BD / 2 - 3 * IN), probe = { ...u, x: 0, z: ez, h: 60 };
+        for (let k = -3; k <= 3; k++) { probe.x = k * 5 * IN; if (sight(probe, u, probe, { x, z }).vis) s -= AIW.dep; }
+        s -= Math.min(...OBJ.map(o => Math.abs(o.x - x))) / IN * .03;
+      }
       if (!best || s > best.s) best = { x, z, s };
     }
     place(u, best.x, best.z); G.busy = false; nextDeploy();
@@ -1294,6 +1493,8 @@ const RULES = `<div class="rules">
 <li><b>Notreparatur</b> (2 BP): Die Einheit erhält 2 Lebenspunkte zurück; das ist ihre Aktion.</li></ul>
 <h3>Missionen</h3><ul><li><b>Vorherrschaft</b>: Jedes gehaltene Ziel 2 Punkte pro Runde, Abschüsse 1 Punkt.</li><li><b>Kopfgeld</b>: Abschüsse bringen 1 Punkt je angefangene 15 Punkte der Einheit.</li><li><b>Durchbruch</b>: Das mittlere Ziel zählt doppelt; ab Runde 3 punktet jede Einheit in der gegnerischen Aufstellungszone.</li></ul>
 <h3>Abwehrfeuer</h3><p>Bewegt sich eine gegnerische Einheit in Sicht und Reichweite, darf die andere Seite einmal pro Runde für 1 BP mit einer Einheit sofort zurückschießen. Dabei trifft nur eine 6.</p>
+<h3>Tempo</h3><p><b>Leertaste</b> oder ein Klick auf die Würfelanzeige überspringt die Animationen der laufenden Aktivierung. Das Tempo (oben rechts) bleibt gespeichert.</p>
+<h3>Gelände</h3><p>Drei Aufstellungen – Ruinenfeld, Depot (Container als lange Sichtsperren) und Trümmerstadt (kurze Sichtlinien) –, jeweils zufällig auch gespiegelt.</p>
 <h3>Kürzel</h3><p>Bew Bewegung · Wid Widerstand · Rüst Rüstungswurf · Rett Rettungswurf · LP Lebenspunkte · OC Kontrollwert · A Attacken · BF/KG trifft auf · S Stärke · DS Durchschlag · SC Schaden. Fahre mit der Maus über einen Wert für die Erklärung.</p>
 <h3>Initiative</h3><p>Vor Runde 1 würfeln beide Seiten; die höhere Zahl beginnt. Danach wechselt der Startspieler jede Runde.</p>
 <h3>Würfeln</h3><ul><li><b>Treffer</b>: W6 ≥ BF/KG. Modifikatoren höchstens ±1. Eine 1 verfehlt immer.</li>
@@ -1310,7 +1511,7 @@ function menu() {
   modal(`<h1>Tau-Gefecht</h1><p class="lead">Ein kleines Tabletop-Gefecht mit deinen bemalten Figuren: Armee auf 100 Punkte zusammenstellen, aufstellen, Missionsziele halten, Befehlspunkte klug einsetzen.</p>
   <div class="opts"><div><small>Mission</small>${seg('oMis', Object.entries(MISSIONS).map(([k, m]) => [k, m.name]), G.mission)}<p class="mdesc" id="mDesc">${MISSIONS[G.mission].text}</p></div>
   <div><small>Computer-Gegner</small>${seg('oDiff', [['leicht', 'Leicht'], ['normal', 'Normal'], ['schwer', 'Schwer']], G.diff)}</div>
-  <div><small>Gelände</small>${seg('oTer', [['standard', 'Standard'], ['gespiegelt', 'Gespiegelt'], ['zufall', 'Zufall']], G.terrain)}</div></div>
+  <div><small>Gelände</small>${seg('oTer', [['zufall', 'Zufall'], ...Object.entries(TERRAINS).map(([k, t]) => [k, t.name])], G.terrain)}</div></div>
   <div class="modes">
     <button class="mode" data-m="ai"><b>Gegen den Computer</b><span>Du führst die orange Armee, der Computer die blaue.</span></button>
     <button class="mode" data-m="hot"><b>Zwei Spieler</b><span>Abwechselnd am selben Gerät (Hot-Seat).</span></button>
@@ -1376,7 +1577,16 @@ function army(side) {
 // ---------- Werkzeugleiste ----------
 $('bRules').onclick = () => showRules();
 $('bFollow').onclick = () => { G.follow = !G.follow; $('bFollow').textContent = 'Kamera folgt: ' + (G.follow ? 'an' : 'aus'); };
-$('bSpeed').onclick = () => { G.speed = G.speed === 1 ? 2 : G.speed === 2 ? 4 : 1; $('bSpeed').textContent = 'Tempo: ' + ({ 1: 'normal', 2: 'schnell', 4: 'sehr schnell' })[G.speed]; };
+const setSpeed = v => { G.speed = v; $('bSpeed').textContent = 'Tempo: ' + ({ 1: 'normal', 2: 'schnell', 4: 'sehr schnell' })[G.speed]; try { localStorage.setItem('tauSpeed', v); } catch {} };
+$('bSpeed').onclick = () => setSpeed(G.speed === 1 ? 2 : G.speed === 2 ? 4 : 1);
+try { const v = +localStorage.getItem('tauSpeed'); if ([1, 2, 4].includes(v) && !Q.has('auto')) setSpeed(v); } catch {}
+// Überspringen: Leertaste oder Klick auf die Würfel beendet alle Animationen der laufenden Aktivierung sofort
+function skipAnims() {
+  if (G.phase !== 'play' || !G.busy || G.skip) return;
+  G.skip = true; for (const a of [...anims]) { anims.delete(a); a.fn(1); a.res(); } dirty = true;
+}
+$('dice').onclick = skipAnims;
+addEventListener('keydown', e => { if (e.code === 'Space' && G.busy && G.phase === 'play' && !e.target.closest?.('input,textarea')) { e.preventDefault(); skipAnims(); } });
 $('bFx').onclick = () => { G.fx = !G.fx; $('bFx').textContent = 'Grafik: ' + (G.fx ? 'hoch' : 'schnell'); dirty = true; };
 $('bSnd').onclick = () => { G.sound = !G.sound; $('bSnd').textContent = 'Ton: ' + (G.sound ? 'an' : 'aus'); };
 $('logHead').onclick = () => $('logbox').classList.toggle('min');
@@ -1405,19 +1615,19 @@ if (!Q.has('sim')) renderer.setAnimationLoop(loop);
 $('load').remove();
 updateHud();
 async function simulate(n = 50, opts = {}) {
-  const out = [], saved = { speed: G.speed, follow: G.follow, sound: G.sound, mode: G.mode, mission: G.mission }; G.instant = true; G.follow = false;
+  const out = [], saved = { speed: G.speed, follow: G.follow, sound: G.sound, mode: G.mode, mission: G.mission, terrain: G.terrain }; G.instant = true; G.follow = false;
   for (let i = 0; i < n; i++) {
-    clearUnits(); G.mode = 'aivai'; G.greedy = opts.greedy ?? null; G.diff = opts.diff ?? G.diff; G.mission = opts.mission ?? Object.keys(MISSIONS)[i % 3]; G.result = null;
-    G.lists = [opts.a ?? randomList(), opts.b ?? randomList()];
+    clearUnits(); G.mode = 'aivai'; G.greedy = opts.greedy ?? null; G.aiLvl = opts.ai ?? null; G.terrain = opts.terrain ?? 'zufall'; G.diff = opts.diff ?? G.diff; G.mission = opts.mission ?? Object.keys(MISSIONS)[i % 3]; G.result = null;
+    G.lists = [opts.a ?? randomList(), opts.b ?? randomList()]; if (opts.mirror) G.lists[1] = G.lists[0].slice();
     startDeploy();
     // Spiellogik läuft im Sofortmodus komplett über Promises – ohne Timer, damit es auch kopflos schnell geht
     for (let k = 0; k < 500000 && !G.result; k++) await null;
-    out.push({ lists: G.lists.map(l => l.slice()), mission: G.mission, ...G.result, units: G.units.map(u => ({ type: u.type, side: u.side, alive: u.alive, dmg: u.stats.dmg, kills: u.stats.kills })) });
+    out.push({ lists: G.lists.map(l => l.slice()), mission: G.mission, terrain: LAYOUT.id, ...G.result, units: G.units.map(u => ({ type: u.type, side: u.side, alive: u.alive, dmg: u.stats.dmg, kills: u.stats.kills })) });
   }
-  G.instant = false; G.greedy = null; Object.assign(G, saved); return out;
+  G.instant = false; G.greedy = null; G.aiLvl = null; Object.assign(G, saved); return out;
 }
 window.__sim = simulate; window.__finish = () => { G.instant = false; finish(); };
-window.__G = G; window.__UT = UT; window.__dbg = { navPlane, navCv, navTex, overlay }; window.__cam = { camera, controls, project: (x, y, z) => { const v = new THREE.Vector3(x, y, z).project(camera), r = renderer.domElement.getBoundingClientRect(); return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height]; }, dirty: () => { dirty = true; } }; window.__start = (mode, a, b) => { G.mode = mode; G.lists = [a ?? randomList(), b ?? randomList()]; if (mode === 'aivai') { TEAMS[0].name = 'Computer A'; TEAMS[1].name = 'Computer B'; } closeModal(); startDeploy(); };
+window.__G = G; window.__UT = UT; window.__dbg = { navPlane, navCv, navTex, overlay, setLayout }; window.__cam = { camera, controls, project: (x, y, z) => { const v = new THREE.Vector3(x, y, z).project(camera), r = renderer.domElement.getBoundingClientRect(); return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height]; }, dirty: () => { dirty = true; } }; window.__start = (mode, a, b) => { G.mode = mode; G.lists = [a ?? randomList(), b ?? randomList()]; if (mode === 'aivai') { TEAMS[0].name = 'Computer A'; TEAMS[1].name = 'Computer B'; } closeModal(); startDeploy(); };
 if (Q.get('fx') === '0') { G.fx = false; $('bFx').textContent = 'Grafik: schnell'; }
 if (Q.has('cam')) { const c = Q.get('cam').split(',').map(Number); camera.position.set(c[0], c[1], c[2]); controls.target.set(c[3], c[4], c[5]); }
 // Auswertung vieler Simulationen: Siegquoten je Seite und Einheit, Auslöschungen, Punkteabstand
@@ -1436,10 +1646,10 @@ function summarize(res) {
     units: Object.fromEntries(Object.entries(ty).map(([t, o]) => [t, { pts: UT[t].pts, win: +(o.w / o.n).toFixed(3), dmg: +(o.dmg / o.cnt).toFixed(2), surv: +(o.surv / o.cnt).toFixed(2) }])) };
 }
 window.__summarize = summarize;
-// Kopflose Simulation (tools/sim.sh): ?sim=200[&greedy=1][&diff=schwer][&mission=kopfgeld] → JSON in <pre id="simresult">
+// Kopflose Simulation (tools/sim.sh): ?sim=200[&greedy=1][&diff=schwer][&ai=schwer,greedy][&mission=kopfgeld] → JSON in <pre id="simresult">
 if (Q.has('sim')) {
   G.fx = false; G.sound = false; $('modal').classList.remove('on');
-  simulate(+Q.get('sim') || 100, { greedy: Q.has('greedy') ? +Q.get('greedy') : undefined, diff: Q.get('diff') ?? undefined, mission: Q.get('mission') ?? undefined })
+  simulate(+Q.get('sim') || 100, { greedy: Q.has('greedy') ? +Q.get('greedy') : undefined, diff: Q.get('diff') ?? undefined, mission: Q.get('mission') ?? undefined, ai: Q.get('ai')?.split(','), mirror: Q.has('mirror'), terrain: Q.get('terrain') ?? undefined })
     .then(res => { const pre = document.createElement('pre'); pre.id = 'simresult'; pre.textContent = JSON.stringify(summarize(res)); document.body.append(pre); })
     .catch(e => { const pre = document.createElement('pre'); pre.id = 'simresult'; pre.textContent = JSON.stringify({ error: String(e?.stack || e) }); document.body.append(pre); });
 } else if (Q.has('auto')) { G.speed = +Q.get('auto') || 4; G.sound = false; window.__start('aivai'); }
