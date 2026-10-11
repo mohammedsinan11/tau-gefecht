@@ -1594,10 +1594,13 @@ function resize() {
 new ResizeObserver(resize).observe(stage);
 
 // ---------- Kleine Helfer ----------
-const d6 = () => 1 + Math.floor(Math.random() * 6);
+// Spielzufall (Würfel) getrennt vom Optik-Zufall: online würfeln beide Geräte mit demselben Startwert identisch
+let RNG = Math.random;
+const seeded = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const d6 = () => 1 + Math.floor(RNG() * 6), vd6 = () => 1 + Math.floor(Math.random() * 6);
 const dParse = D => { const m = /^W(\d)(?:\+(\d+))?$/.exec(String(D)); return m ? [+m[1], +(m[2] || 0)] : [6, 0]; };
 const dAvg = D => typeof D === 'number' ? D : (dParse(D)[0] + 1) / 2 + dParse(D)[1];
-const dRoll = D => { if (typeof D === 'number') return D; const [n, b] = dParse(D); return 1 + Math.floor(Math.random() * n) + b; };
+const dRoll = D => { if (typeof D === 'number') return D; const [n, b] = dParse(D); return 1 + Math.floor(RNG() * n) + b; };
 const fmt = (v, n = 1) => v.toFixed(n).replace('.', ',');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const $ = id => document.getElementById(id);
@@ -1957,6 +1960,10 @@ function bolt(a, b, col, len, width, speed, arc = 0, trail = false) {
 const G = { mode: 'ai', mission: 'vorherrschaft', diff: 'normal', terrain: 'zufall', owUsed: [false, false], follow: true, cp: [2, 2], phase: 'menu', units: [], round: 1, turn: 0, starter: 0, vp: [0, 0], act: null, busy: false, speed: 1, fx: true, sound: true,
   lists: [[], []], deployQ: [], firstBlood: false, view: 0 };
 const isAI = s => G.mode === 'aivai' || (G.mode === 'ai' && s === 1);
+// Online: NET.side ist die eigene Seite (0 = Gastgeber/orange, 1 = Gast/blau); die andere Seite steuert das Gegenüber
+const NET = { side: 0, code: null, send: () => {}, q: [], ow: [], owRes: null, running: false, n: 0, chk: {}, closing: false };
+const isRemote = s => G.mode === 'online' && s !== NET.side;
+const notMine = s => isAI(s) || isRemote(s);
 const living = s => G.units.filter(u => u.alive && u.placed && (s === undefined || u.side === s));
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const gapAt = (u, p, e) => (Math.hypot(p.x - e.x, p.z - e.z) - u.r - e.r) / IN;     // Abstand Base-Kante zu Base-Kante in Zoll
@@ -2153,10 +2160,10 @@ async function showDice(att, def, res, kind) {
   const row = async (label, vals, cls, sum) => {
     const r = document.createElement('div'); r.className = 'drow';
     r.innerHTML = `<span class="dl">${label}</span><span class="dd"></span><span class="dr"></span>`; el.append(r);
-    const dd = r.querySelector('.dd'), dice = vals.map(() => { const d = document.createElement('span'); d.className = 'die roll'; d.textContent = d6(); dd.append(d); return d; });
+    const dd = r.querySelector('.dd'), dice = vals.map(() => { const d = document.createElement('span'); d.className = 'die roll'; d.textContent = vd6(); dd.append(d); return d; });
     if (!vals.length) dd.innerHTML = '<span style="color:var(--mut);font-size:12px">–</span>';
     const t0 = performance.now();
-    await tween(.3 * sp, () => { if (performance.now() - t0 > 40) dice.forEach(d => d.textContent = d6()); });
+    await tween(.3 * sp, () => { if (performance.now() - t0 > 40) dice.forEach(d => d.textContent = vd6()); });
     dice.forEach((d, i) => { d.className = 'die ' + cls(vals[i]); d.textContent = vals[i]; });
     r.querySelector('.dr').innerHTML = sum; await wait(.16 * sp);
   };
@@ -2304,10 +2311,13 @@ function beginTurn() {
   if (checkEnd()) return;
   updateHud();
   if (isAI(G.turn)) aiTurn();
+  else if (isRemote(G.turn)) setHint(`<b style="color:${TEAMS[G.turn].col}">Der Gegner</b> ist am Zug …`);
+  else if (G.mode === 'online') { if (G.lastTurn !== G.turn) banner('Du bist dran', TEAMS[G.turn].col); setHint(`Wähle eine deiner Einheiten (${G.turn ? 'blauer' : 'orangefarbener'} Ring), um sie zu aktivieren.`); }
   else if (G.mode === 'hot') { const c = TEAMS[G.turn]; if (G.lastTurn !== G.turn) banner(`${c.name} ist dran`, c.col); setHint(`<b style="color:${c.col}">${c.name}</b>: Wähle eine eigene Einheit zum Aktivieren.`); }
   else setHint('Wähle eine deiner Einheiten (orangefarbener Ring), um sie zu aktivieren.');
 }
 function endActivation() {
+  if (G.mode === 'online') netCheck();
   const u = G.act?.u; if (u) { u.done = true; updateLabel(u); if (G.act.strat && !G.act.attacked) G.cp[u.side] += 1; }
   G.act = null; clearSel(); updateObjectives();
   if (checkEnd()) return;
@@ -2344,13 +2354,16 @@ function finish() {
   const all = G.units.filter(u => u.placed), mvp = all.reduce((m, u) => (u.stats.dmg + u.stats.kills * 3 > (m ? m.stats.dmg + m.stats.kills * 3 : -1) ? u : m), null);
   const statRows = s => all.filter(u => u.side === s).map(u => `<tr${u === mvp ? ' class="mvp"' : ''}><td>${PORTRAIT[u.type] ? `<img src="${PORTRAIT[u.type]}" alt="">` : ''}</td><td>${esc(u.T.short)}${u === mvp ? ' <span class="tag">Bester Kämpfer</span>' : ''}</td><td>${u.stats.dmg}</td><td>${u.stats.kills}</td><td>${u.alive ? `${u.w}/${u.T.W} LP` : '<span style="color:var(--bad)">vernichtet</span>'}</td></tr>`).join('');
   const stats = [0, 1].map(s => `<div class="statcol"><h3><i class="dot" style="background:${TEAMS[s].col}"></i>${TEAMS[s].name} · ${G.vp[s]} Punkte</h3><table class="stat"><tr><th></th><th>Einheit</th><th>Schaden</th><th>Abschüsse</th><th>Zustand</th></tr>${statRows(s)}</table></div>`).join('');
-  const t = win === null ? 'Unentschieden' : (G.mode === 'ai' ? (win === 0 ? 'Sieg!' : 'Niederlage') : `${TEAMS[win].name} gewinnt`);
+  const t = win === null ? 'Unentschieden' : (G.mode === 'ai' || G.mode === 'online' ? (win === (G.mode === 'ai' ? 0 : NET.side) ? 'Sieg!' : 'Niederlage') : `${TEAMS[win].name} gewinnt`);
   banner(t, win === null ? '#ece8df' : TEAMS[win].col); snd('round');
   setTimeout(() => modal(`<h1>${t}</h1><p class="lead">${wiped !== null ? 'Eine Armee wurde vollständig vernichtet.' : `Nach ${ROUNDS} Runden.`}</p>
     <p class="lead">Mission: ${MISSIONS[G.mission].name}</p><div class="stats2">${stats}</div>
     <div class="row" style="justify-content:center"><button class="btn pri" id="rematch">Revanche (gleiche Armeen)</button><button class="btn" id="again">Neues Spiel</button><button class="btn" id="look">Schlachtfeld ansehen</button></div>`, d => {
-    d.querySelector('#rematch').onclick = () => { closeModal(); clearUnits(); $('log').innerHTML = ''; G.phase = 'menu'; updateHud(); startDeploy(); };
-    d.querySelector('#again').onclick = () => { closeModal(); clearUnits(); $('log').innerHTML = ''; G.vp = [0, 0]; menu(); updateHud(); };
+    d.querySelector('#rematch').onclick = () => {
+      if (G.mode === 'online') { if (NET.side === 0) hostStart(G.lists[1]); else { NET.send({ t: 'rematch' }); closeModal(); setHint('Revanche angefragt – warte auf den Gastgeber …'); } return; }
+      closeModal(); clearUnits(); $('log').innerHTML = ''; G.phase = 'menu'; updateHud(); startDeploy();
+    };
+    d.querySelector('#again').onclick = () => { if (G.mode === 'online') { netClose(); return; } closeModal(); clearUnits(); $('log').innerHTML = ''; G.vp = [0, 0]; menu(); updateHud(); };
     d.querySelector('#look').onclick = () => closeModal();
   }), 1800);
 }
@@ -2401,19 +2414,20 @@ function refreshAct() {
     const r = ringMesh(k === 'mark' ? 0xff3b3b : k === 'fight' ? 0xffd04a : 0xff5a48); r.position.set(e.x, .8, e.z); r.scale.setScalar(e.r + 6); targetRings.push(r);
   }
   showCard(u);
+  if (isRemote(u.side)) { setHint(`${nameOf(u)} wird vom Gegner aktiviert …`); dirty = true; return; }
   const acts = $('acts'), btn = (t, fn, cls = '', dis = false) => { const b = document.createElement('button'); b.className = 'btn ' + cls; b.textContent = t; b.disabled = dis; b.onclick = () => { if (!G.busy) fn(); }; acts.append(b); };
-  if (!a.moved && !a.sprint && !u.T.noSprint && !a.startEng) btn('Sprinten (+W6")', doSprint);
-  if (u.T.marker) btn(a.markMode ? 'Markieren: an' : 'Markerlicht', () => { a.markMode = !a.markMode; refreshAct(); }, a.markMode ? 'on' : '');
-  if (a.moved && a.prev) btn('↶ Bewegung zurück', undoMove);
+  if (!a.moved && !a.sprint && !u.T.noSprint && !a.startEng) btn('Sprinten (+W6")', () => act('spr'));
+  if (u.T.marker) btn(a.markMode ? 'Markieren: an' : 'Markerlicht', () => act('mark'), a.markMode ? 'on' : '');
+  if (a.moved && a.prev) btn('↶ Bewegung zurück', () => act('undo'));
   // Taktiken (Befehlspunkte): je Aktivierung eine
   const cp = G.cp[u.side], fightNow = engagedAt(u, u).length && canFight(a), shootNow = canShoot(a) && !a.markMode;
   for (const [key, label, cost, ok] of [['reroll', 'Gezieltes Feuer', 1, shootNow || fightNow], ['ap', 'Überladung', 1, shootNow || fightNow]]) {
     if (!ok && a.strat !== key) continue;
-    btn(`${label} · ${cost} BP`, () => { if (a.strat === key) { a.strat = null; G.cp[u.side] += cost; } else { if (a.strat) G.cp[u.side] += 1; a.strat = key; G.cp[u.side] -= cost; } snd('click'); updateHud(); refreshAct(); },
+    btn(`${label} · ${cost} BP`, () => act('strat', key),
       a.strat === key ? 'on' : '', a.strat !== key && cp < cost + (a.strat ? -1 : 0));
   }
-  if (u.w < u.T.W && !a.strat && !a.sprint && !(a.startEng && a.moved)) btn('Notreparatur · 2 BP', doRepair, '', cp < 2);
-  btn('Aktivierung beenden', () => endActivation(), 'pri');
+  if (u.w < u.T.W && !a.strat && !a.sprint && !(a.startEng && a.moved)) btn('Notreparatur · 2 BP', () => act('rep'), '', cp < 2);
+  btn('Aktivierung beenden', () => act('end'), 'pri');
   const parts = [];
   if (!a.moved) parts.push(a.startEng ? 'Klicke in die Fläche, um dich zurückzuziehen (danach keine Aktion)' : `Bewegen: bis ${a.maxMove}" in die farbige Fläche klicken`);
   if (nT) parts.push(a.markMode ? 'Ziel zum Markieren anklicken' : engagedAt(u, u).length ? 'Gegner im Nahkampf anklicken' : 'Gegner mit rotem Ring anklicken zum Schießen');
@@ -2439,6 +2453,7 @@ async function reactFire(mover) {
   const ev = s => { const c = ctx(s); return gunsInRange(s, c).reduce((t, w) => t + expect(s, mover, w, c), 0); };
   let shooter = null;
   if (isAI(side)) { AIS = aiLevel(side); const [b, v] = shooters.map(s => [s, ev(s)]).sort((x, y) => y[1] - x[1])[0]; if (v >= .45 || v >= mover.w * .4) shooter = b; }
+  else if (isRemote(side)) { setHint('Der Gegner entscheidet über Abwehrfeuer …'); const i = await NET.waitOw(); shooter = i >= 0 ? G.units[i] : null; }
   else {
     const wasFollow = G.follow; G.follow = true; follow(mover.x, mover.z); G.follow = wasFollow;
     const hot = G.mode === 'hot', who = hot ? `${TEAMS[side].name}: ` : '';
@@ -2450,6 +2465,7 @@ async function reactFire(mover) {
       bar.querySelectorAll('[data-i]').forEach(b => { const s2 = shooters[+b.dataset.i]; b.onmouseenter = () => showLos(s2, mover, ctx(s2).cover); b.onmouseleave = () => { losLine.visible = false; dirty = true; }; b.onclick = () => { bar.remove(); losLine.visible = false; res(s2); }; });
       bar.querySelector('[data-no]').onclick = () => { bar.remove(); losLine.visible = false; res(null); };
     });
+    if (G.mode === 'online') NET.send({ t: 'ow', i: shooter ? G.units.indexOf(shooter) : -1 });
   }
   if (!shooter) return;
   G.cp[side] -= 1; G.owUsed[side] = true; updateHud();
@@ -2510,7 +2526,7 @@ function pick(ev) {
   }
   hits.sort((x, y) => x[0] - y[0]);
   // hintereinander stehende Figuren: aktivierbare eigene bzw. gültige Ziele haben Vorrang
-  const useful = u => G.phase === 'play' && !isAI(G.turn) && (G.act && u.side !== G.act.u.side ? !!validTarget(u) : u.side === G.turn && !u.done && u !== G.act?.u);
+  const useful = u => G.phase === 'play' && !notMine(G.turn) && (G.act && u.side !== G.act.u.side ? !!validTarget(u) : u.side === G.turn && !u.done && u !== G.act?.u);
   const best = (hits.find(([, u]) => useful(u)) ?? hits[0])?.[1] ?? null;
   const t = d.y < 0 ? -o.y / d.y : null;
   return { unit: best, ground: t ? { x: o.x + d.x * t, z: o.z + d.z * t } : null };
@@ -2522,13 +2538,13 @@ renderer.domElement.addEventListener('pointerup', e => {
   if (G.busy) return;
   const p = pick(e);
   if (G.phase === 'deploy') return deployClick(p);
-  if (G.phase !== 'play' || isAI(G.turn)) return;
+  if (G.phase !== 'play' || notMine(G.turn) || NET.running) return;
   const a = G.act;
-  if (p.unit && p.unit.side !== G.turn && a) { if (validTarget(p.unit)) doTarget(p.unit); return; }
-  if (p.unit && p.unit.side === G.turn && !p.unit.done && (!a || !a.moved) && p.unit !== a?.u) { select(p.unit); return; }
+  if (p.unit && p.unit.side !== G.turn && a) { if (validTarget(p.unit)) act('tgt', G.units.indexOf(p.unit)); return; }
+  if (p.unit && p.unit.side === G.turn && !p.unit.done && (!a || !a.moved) && p.unit !== a?.u) { act('sel', G.units.indexOf(p.unit)); return; }
   if (a && !a.moved && p.ground && a.nav) {
     const [k, m] = cellOf(p.ground.x, p.ground.z);
-    if (k >= 0 && m >= 0 && k < NX && m < NZ && a.nav.ok(m * NX + k)) doMove(m * NX + k);
+    if (k >= 0 && m >= 0 && k < NX && m < NZ && a.nav.ok(m * NX + k)) act('mv', m * NX + k);
   }
 });
 renderer.domElement.addEventListener('dblclick', e => { const p = pick(e); if (p.unit) focusOn(p.unit); });
@@ -2851,9 +2867,9 @@ function homeView(side = 0, dur = 1.2) {
   return tween(dur, k => { const e = k * k * (3 - 2 * k); controls.target.lerpVectors(t0, t1, e); camera.position.lerpVectors(c0, c1, e); });
 }
 function startDeploy() {
-  G.phase = 'deploy'; homeView(0);
-  const ids = Object.keys(TERRAINS), tid = TERRAINS[G.terrain] ? G.terrain : ids[Math.floor(Math.random() * ids.length)];
-  setLayout(tid, Math.random() < .5);
+  G.phase = 'deploy'; homeView(G.mode === 'online' ? NET.side : 0);
+  const ids = Object.keys(TERRAINS), tid = G.mode === 'online' ? G.netCfg.tid : TERRAINS[G.terrain] ? G.terrain : ids[Math.floor(Math.random() * ids.length)];
+  setLayout(tid, G.mode === 'online' ? G.netCfg.mirror : Math.random() < .5);
   for (const s of [0, 1]) for (const t of G.lists[s].slice().sort((a, b) => UT[b].pts - UT[a].pts)) G.units.push(makeUnit(t, s));
   const q = [[], []]; for (const u of G.units) q[u.side].push(u);
   G.deployQ = []; while (q[0].length || q[1].length) { if (q[0].length) G.deployQ.push(q[0].shift()); if (q[1].length) G.deployQ.push(q[1].shift()); }
@@ -2882,6 +2898,10 @@ async function nextDeploy() {
       if (!best || s > best.s) best = { x, z, s };
     }
     place(u, best.x, best.z); G.busy = false; nextDeploy();
+  } else if (isRemote(u.side)) {
+    setHint(`<b style="color:${TEAMS[u.side].col}">Der Gegner</b> stellt ${nameOf(u)} auf …`); u.holder.visible = false;
+  } else if (G.autoDep?.[u.side]) {
+    for (let i = 0; i < 400; i++) { const x = (Math.random() - .5) * (BW - 2 * u.r), z = (u.side ? -1 : 1) * (BD / 2 - u.r - Math.random() * (ZONE * IN - 2 * u.r)); if (freeSpot(u, x, z)) { setTimeout(() => act('place', G.units.indexOf(u), x, z), 60); return; } }
   } else {
     setHint(`<b style="color:${TEAMS[u.side].col}">${TEAMS[u.side].name}</b>: Stelle ${nameOf(u)} in deiner Zone auf (Klick). <button class="btn" id="autoDep" style="pointer-events:auto;margin-left:8px;padding:3px 10px">Rest automatisch</button>`);
     $('autoDep').onclick = autoDeploy;
@@ -2893,18 +2913,19 @@ function place(u, x, z) {
   G.deployQ.shift(); updateLabel(u); snd('click');
 }
 function deployHover(p) {
-  const u = G.deployQ[0]; if (!u || isAI(u.side) || !p.ground) return;
+  const u = G.deployQ[0]; if (!u || notMine(u.side) || !p.ground) return;
   u.holder.visible = true; u.holder.position.set(p.ground.x, 0, p.ground.z); u.holder.rotation.y = u.side === 0 ? Math.PI : 0;
   const ok = inZone(u.side, p.ground.z) && freeSpot(u, p.ground.x, p.ground.z);
   selRing.visible = true; selRing.position.set(p.ground.x, .8, p.ground.z); selRing.scale.setScalar(u.r + 6); selRing.material.color.set(ok ? 0xffffff : 0xff3030);
 }
 function deployClick(p) {
-  const u = G.deployQ[0]; if (!u || isAI(u.side) || !p.ground) return;
+  const u = G.deployQ[0]; if (!u || notMine(u.side) || NET.running || !p.ground) return;
   if (!inZone(u.side, p.ground.z) || !freeSpot(u, p.ground.x, p.ground.z)) { toast('Dort ist kein Platz – nur in der farbigen Zone, nicht auf Gelände oder Figuren.'); return; }
-  selRing.visible = false; place(u, p.ground.x, p.ground.z); nextDeploy();
+  selRing.visible = false; act('place', G.units.indexOf(u), p.ground.x, p.ground.z);
 }
 function autoDeploy() {
   const side = G.deployQ[0]?.side;
+  if (G.mode === 'online') { (G.autoDep ??= [false, false])[side] = true; nextDeploy(); return; }
   for (const u of G.deployQ.filter(u => u.side === side)) {
     for (let i = 0; i < 400; i++) { const x = (Math.random() - .5) * (BW - 2 * u.r), z = (side ? -1 : 1) * (BD / 2 - u.r - Math.random() * (ZONE * IN - 2 * u.r)); if (freeSpot(u, x, z)) { u.placed = true; u.holder.visible = true; setPos(u, x, z); u.holder.rotation.y = side === 0 ? Math.PI : 0; updateLabel(u); break; } }
   }
@@ -2989,6 +3010,7 @@ const RULES = `<div class="rules">
 <li><b>Notreparatur</b> (2 BP): Die Einheit erhält 2 Lebenspunkte zurück; das ist ihre Aktion.</li></ul>
 <h3>Missionen</h3><ul><li><b>Vorherrschaft</b>: Jedes gehaltene Ziel 2 Punkte pro Runde, Abschüsse 1 Punkt.</li><li><b>Kopfgeld</b>: Abschüsse bringen 1 Punkt je angefangene 15 Punkte der Einheit.</li><li><b>Durchbruch</b>: Das mittlere Ziel zählt doppelt; ab Runde 3 punktet jede Einheit in der gegnerischen Aufstellungszone.</li></ul>
 <h3>Abwehrfeuer</h3><p>Bewegt sich eine gegnerische Einheit in Sicht und Reichweite, darf die andere Seite einmal pro Runde für 1 BP mit einer Einheit sofort zurückschießen. Dabei trifft nur eine 6.</p>
+<h3>Online-Spiel</h3><p>Im Menü „Online-Spiel“ → „Spiel erstellen“: Armee wählen, dann den Link (oder den 5-stelligen Code) an den Mitspieler schicken. Er öffnet den Link, wählt seine Armee – los geht’s. Der Gastgeber spielt Orange und legt Mission und Gelände fest. Die Verbindung läuft direkt zwischen den beiden Browsern.</p>
 <h3>Tempo</h3><p><b>Leertaste</b> oder ein Klick auf die Würfelanzeige überspringt die Animationen der laufenden Aktivierung. Das Tempo (oben rechts) bleibt gespeichert.</p>
 <h3>Gelände</h3><p>Drei Aufstellungen – Ruinenfeld, Depot (Container als lange Sichtsperren) und Trümmerstadt (kurze Sichtlinien) –, jeweils zufällig auch gespiegelt.</p>
 <h3>Kürzel</h3><p>Bew Bewegung · Wid Widerstand · Rüst Rüstungswurf · Rett Rettungswurf · LP Lebenspunkte · OC Kontrollwert · A Attacken · BF/KG trifft auf · S Stärke · DS Durchschlag · SC Schaden. Fahre mit der Maus über einen Wert für die Erklärung.</p>
@@ -3011,6 +3033,7 @@ function menu() {
   <div class="modes">
     <button class="mode" data-m="ai"><b>Gegen den Computer</b><span>Du führst die orange Armee, der Computer die blaue.</span></button>
     <button class="mode" data-m="hot"><b>Zwei Spieler</b><span>Abwechselnd am selben Gerät (Hot-Seat).</span></button>
+    <button class="mode" data-m="online"><b>Online-Spiel</b><span>Zu zweit an zwei Geräten – Spiel erstellen und Link teilen.</span></button>
     <button class="mode" data-m="aivai"><b>Zuschauen</b><span>Computer gegen Computer – zum Kennenlernen.</span></button>
   </div><div class="row"><button class="btn" id="mRules">Regeln lesen</button></div>`, d => {
     d.querySelectorAll('.seg').forEach(sg => sg.querySelectorAll('button').forEach(b => b.onclick = () => {
@@ -3020,6 +3043,7 @@ function menu() {
     d.querySelectorAll('.mode').forEach(b => b.onclick = () => {
       G.mode = b.dataset.m; TEAMS[0].name = 'Spieler 1'; TEAMS[1].name = 'Spieler 2';
       if (G.mode === 'ai') { TEAMS[0].name = 'Du'; TEAMS[1].name = 'Computer'; }
+      if (G.mode === 'online') { onlineMenu(); return; }
       if (G.mode === 'aivai') { TEAMS[0].name = 'Computer A'; TEAMS[1].name = 'Computer B'; G.lists = [randomList(), randomList()]; closeModal(); startDeploy(); }
       else army(0);
     });
@@ -3063,12 +3087,165 @@ function army(side) {
     d.querySelector('#aRnd').onclick = () => { list.length = 0; list.push(...randomList()); draw(d); };
     d.querySelector('#aOk').onclick = () => {
       if (side === 0 && G.mode === 'hot') { army(1); return; }
+      if (G.mode === 'online') { G.lists[side] = list.slice(); side === 0 ? onlineHost() : onlineJoin(list.slice()); return; }
       if (G.mode === 'ai') { const pp = sum(list); G.lists[1] = randomList(pp - 5, pp); }
       closeModal(); startDeploy();
     };
     draw(d);
   });
 }
+
+// ---------- Online-Spiel ----------
+// Beide Geräte führen dieselbe Partie aus: übertragen werden nur die Aktionen der Spieler, gewürfelt wird mit einem gemeinsamen
+// Startwert. Verbindung direkt von Browser zu Browser (WebRTC über PeerJS, Vermittlung über den freien PeerJS-Server).
+// Test ohne Netz: ?net=bc verbindet zwei Tabs desselben Browsers über einen BroadcastChannel.
+const ACTIONS = {
+  sel: i => select(G.units[i]),
+  mv: j => doMove(j),
+  undo: () => undoMove(),
+  spr: () => doSprint(),
+  strat: key => {
+    const a = G.act, u = a.u, cost = 1;
+    if (a.strat === key) { a.strat = null; G.cp[u.side] += cost; } else { if (a.strat) G.cp[u.side] += 1; a.strat = key; G.cp[u.side] -= cost; }
+    snd('click'); updateHud(); refreshAct();
+  },
+  mark: () => { G.act.markMode = !G.act.markMode; refreshAct(); },
+  tgt: i => doTarget(G.units[i]),
+  rep: () => doRepair(),
+  end: () => endActivation(),
+  place: (i, x, z) => { place(G.units[i], x, z); nextDeploy(); },
+};
+// Eigene Aktion: online erst an das Gegenüber senden, dann (wie dort) ausführen
+async function act(n, ...a) {
+  if (G.mode !== 'online') return ACTIONS[n](...a);
+  if (NET.running) return;
+  NET.send({ t: 'a', n, a }); NET.running = true; NET.trace?.push(['L', n, ...a.map(v => typeof v === 'number' ? Math.round(v) : v)]);
+  try { await ACTIONS[n](...a); } finally { NET.running = false; }
+}
+async function netPump() {
+  const m = NET.q.shift(); NET.running = true; NET.trace?.push(['R', m.n, ...m.a.map(v => typeof v === 'number' ? Math.round(v) : v)]);
+  try { await ACTIONS[m.n](...m.a); } catch (e) { console.error(e); }
+  NET.running = false;
+}
+setInterval(() => { if (NET.q.length && !NET.running && !G.busy) netPump(); }, 100);   // auch ohne Bildwiederholung (Hintergrund-Tab)
+NET.waitOw = () => new Promise(res => { const f = () => { if (NET.ow.length) { NET.owRes = null; res(NET.ow.shift()); } else NET.owRes = f; }; f(); });
+// Prüfsumme nach jeder Aktivierung: beide Geräte müssen denselben Zustand haben
+function netHash() {
+  let h = 2166136261; const add = v => { h ^= v; h = Math.imul(h, 16777619); };
+  for (const u of G.units) { add(Math.round(u.x)); add(Math.round(u.z)); add(u.w); add(u.alive ? 1 : 0); }
+  add(G.vp[0]); add(G.vp[1]); add(G.cp?.[0] ?? 0); add(G.cp?.[1] ?? 0);
+  return h >>> 0;
+}
+function netCheck() {
+  const n = ++NET.n, h = netHash(); NET.send({ t: 'chk', n, h });
+  if (NET.chk[n] !== undefined && NET.chk[n] !== h) netDesync(); else NET.chk[n] = h;
+}
+function netDesync() { if (NET.desync) return; NET.desync = true; toast('Achtung: Die beiden Geräte sind nicht mehr synchron. Bitte eine Revanche starten.'); }
+function netMsg(m) {
+  if (!m || typeof m !== 'object') return;
+  if (m.t === 'a' && ACTIONS[m.n] && Array.isArray(m.a)) NET.q.push(m);
+  else if (m.t === 'ow') { NET.ow.push(+m.i); NET.owRes?.(); }
+  else if (m.t === 'hello' && NET.side === 0 && Array.isArray(m.list)) hostStart(m.list.filter(t => UT[t]));
+  else if (m.t === 'rematch' && NET.side === 0 && G.phase === 'end') hostStart(G.lists[1]);
+  else if (m.t === 'start' && NET.side === 1) startOnline(m);
+  else if (m.t === 'chk') { if (NET.chk[m.n] !== undefined && NET.chk[m.n] !== m.h) netDesync(); else NET.chk[m.n] = m.h; }
+  else if (m.t === 'bye') netLost();
+}
+// Gastgeber legt Startwert, Gelände und Mission fest und startet beide Seiten
+function hostStart(guestList) {
+  const ids = Object.keys(TERRAINS);
+  const cfg = { t: 'start', seed: Math.floor(Math.random() * 2 ** 31), lists: [G.lists[0].slice(), guestList.slice()], mission: G.mission,
+    tid: TERRAINS[G.terrain] ? G.terrain : ids[Math.floor(Math.random() * ids.length)], mirror: Math.random() < .5 };
+  NET.send(cfg); startOnline(cfg);
+}
+function startOnline(cfg) {
+  closeModal(); clearUnits(); $('log').innerHTML = '';
+  RNG = seeded(cfg.seed); G.mode = 'online'; G.netCfg = cfg; G.mission = MISSIONS[cfg.mission] ? cfg.mission : 'vorherrschaft';
+  G.lists = cfg.lists.map(l => l.filter(t => UT[t])); G.autoDep = [false, false];
+  NET.q = []; NET.ow = []; NET.n = 0; NET.chk = {}; NET.desync = false;
+  TEAMS[NET.side].name = 'Du'; TEAMS[1 - NET.side].name = 'Gegner';
+  log(`Online-Spiel · Mission: ${MISSIONS[G.mission].name}`);
+  startDeploy();
+}
+const CODE_CH = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const peerId = code => 'tau-gefecht-' + code;
+const gameLink = code => location.href.split(/[?#]/)[0] + '?join=' + code;
+let PeerLib = null;
+async function loadPeer() { return PeerLib ??= (await import('https://cdn.jsdelivr.net/npm/peerjs@1.5.4/+esm')).Peer; }
+function bindConn(c, onOpen) {
+  NET.conn = c; NET.send = m => { try { if (c.open) c.send(m); } catch {} };
+  c.on('data', netMsg); c.on('open', () => onOpen?.()); c.on('close', netLost); c.on('error', netLost);
+}
+function useBroadcast(code, onOpen) {   // nur für Tests: zwei Tabs im selben Browser
+  const ch = new BroadcastChannel('tau-' + code); NET.send = m => ch.postMessage(m); ch.onmessage = e => netMsg(e.data); NET.bc = ch; onOpen?.();
+}
+function onlineMenu() {
+  modal(`<h2>Online-Spiel</h2><p class="lead">Zu zweit an zwei Geräten: Einer erstellt das Spiel und schickt den Link (oder den Code), der andere tritt bei.
+    Die Verbindung läuft direkt zwischen den Browsern.</p>
+    <div class="modes"><button class="mode" id="oHost"><b>Spiel erstellen</b><span>Du spielst Orange und legst Mission und Gelände fest.</span></button></div>
+    <div class="row" style="margin-top:12px"><input id="oCode" maxlength="5" placeholder="CODE" autocomplete="off" style="text-transform:uppercase;font:600 18px monospace;width:110px;padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:#0003;color:inherit">
+    <button class="btn pri" id="oJoin">Beitreten</button><span class="grow"></span><button class="btn" id="oBack">Zurück</button></div>`, d => {
+    d.querySelector('#oHost').onclick = () => { NET.side = 0; TEAMS[0].name = 'Du'; TEAMS[1].name = 'Gegner'; army(0); };
+    const join = () => { const c = d.querySelector('#oCode').value.trim().toUpperCase(); if (!/^[A-Z0-9]{5}$/.test(c)) { toast('Der Code hat 5 Zeichen.'); return; } NET.code = c; NET.side = 1; TEAMS[1].name = 'Du'; TEAMS[0].name = 'Gegner'; army(1); };
+    d.querySelector('#oJoin').onclick = join; d.querySelector('#oCode').onkeydown = e => { if (e.key === 'Enter') join(); };
+    d.querySelector('#oBack').onclick = menu;
+  });
+}
+function waitDlg(html, cancel = true) {
+  modal(`${html}<div class="row" style="margin-top:14px"><span class="grow"></span>${cancel ? '<button class="btn" id="nCancel">Abbrechen</button>' : ''}</div>`, d => { const b = d.querySelector('#nCancel'); if (b) b.onclick = netClose; });
+}
+async function onlineHost() {
+  G.mode = 'online'; NET.side = 0; TEAMS[0].name = 'Du'; TEAMS[1].name = 'Gegner';
+  const code = Array.from({ length: 5 }, () => CODE_CH[Math.floor(Math.random() * CODE_CH.length)]).join(''); NET.code = code;
+  const show = () => waitDlg(`<h2>Warte auf Mitspieler …</h2><p class="lead">Schicke diesen Link an deinen Mitspieler:</p>
+    <div class="row"><input id="nLink" readonly value="${esc(gameLink(code))}" style="flex:1;min-width:0;padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:#0003;color:inherit"><button class="btn pri" id="nCopy">Kopieren</button></div>
+    <p class="lead" style="margin-top:10px">… oder den Code: <b style="font:700 26px monospace;letter-spacing:4px;color:var(--acc)">${code}</b></p>
+    <p class="mdesc">Mission: ${MISSIONS[G.mission].name} · Gelände: ${TERRAINS[G.terrain]?.name ?? 'Zufall'}</p>`);
+  if (Q.get('net') === 'bc') { useBroadcast(code); show(); dbgCode(code); return; }
+  waitDlg('<h2>Verbinde …</h2><p class="lead">Online-Spiel wird vorbereitet.</p>');
+  try {
+    const Peer = await loadPeer(), peer = NET.peer = new Peer(peerId(code), { debug: 0 });
+    peer.on('open', () => { show(); const b = $('modal').querySelector('#nCopy'); if (b) b.onclick = () => { navigator.clipboard?.writeText(gameLink(code)).then(() => toast('Link kopiert.'), () => {}); $('modal').querySelector('#nLink').select(); }; });
+    peer.on('connection', c => { if (NET.conn) { c.on('open', () => c.close()); return; } bindConn(c); });
+    peer.on('error', e => { if (e.type === 'unavailable-id') { netClose(true); onlineHost(); } else if (!NET.conn) netFail(e); });
+  } catch (e) { netFail(e); }
+}
+async function onlineJoin(list) {
+  G.mode = 'online'; NET.side = 1; TEAMS[1].name = 'Du'; TEAMS[0].name = 'Gegner';
+  waitDlg(`<h2>Verbinde mit Spiel ${esc(NET.code)} …</h2><p class="lead">Gleich geht es los – der Gastgeber legt Mission und Gelände fest.</p>`);
+  const hello = () => NET.send({ t: 'hello', list });
+  if (Q.get('net') === 'bc') { useBroadcast(NET.code, hello); return; }
+  try {
+    const Peer = await loadPeer(), peer = NET.peer = new Peer({ debug: 0 });
+    peer.on('open', () => bindConn(peer.connect(peerId(NET.code), { reliable: true, serialization: 'json' }), hello));
+    peer.on('error', e => netFail(e.type === 'peer-unavailable' ? 'Kein offenes Spiel mit diesem Code gefunden.' : e));
+  } catch (e) { netFail(e); }
+}
+function netFail(e) {
+  if (NET.closing) return;
+  console.error(e); netClose(true);
+  modal(`<h2>Keine Verbindung</h2><p class="lead">${esc(typeof e === 'string' ? e : 'Die Online-Verbindung konnte nicht aufgebaut werden. Prüfe die Internetverbindung; manche Firmen- oder Mobilnetze blockieren direkte Verbindungen.')}</p>
+    <div class="row"><span class="grow"></span><button class="btn pri" id="nOk">Zum Menü</button></div>`, d => d.querySelector('#nOk').onclick = menu);
+}
+function netLost() {
+  if (NET.closing || G.mode !== 'online' || !['deploy', 'play', 'end'].includes(G.phase)) return;
+  netClose(true);
+  modal(`<h2>Verbindung getrennt</h2><p class="lead">Die Verbindung zum Gegner ist abgebrochen.</p><div class="row"><span class="grow"></span><button class="btn pri" id="nOk">Zum Menü</button></div>`,
+    d => d.querySelector('#nOk').onclick = () => { clearUnits(); $('log').innerHTML = ''; menu(); });
+}
+// Verbindung beenden; ohne quiet zurück ins Hauptmenü
+function netClose(quiet = false) {
+  NET.closing = true; try { NET.send({ t: 'bye' }); } catch {}
+  try { NET.conn?.close(); } catch {} try { NET.peer?.destroy(); } catch {} try { NET.bc?.close(); } catch {}
+  NET.conn = NET.peer = NET.bc = null; NET.send = () => {}; NET.q = []; NET.running = false; RNG = Math.random;
+  setTimeout(() => { NET.closing = false; }, 0);
+  if (!quiet) { G.mode = 'ai'; clearUnits(); $('log').innerHTML = ''; menu(); }
+}
+const dbgCode = code => { window.__netCode = code; };
+// Testhilfen für tools/net-test.mjs
+window.__NET = NET;
+window.__net = { act, autoDeploy, validTarget: e => validTarget(e), randomList: () => randomList(), hash: netHash,
+  hostAs: () => { G.mode = 'online'; NET.side = 0; onlineHost(); }, joinAs: l => { G.lists[1] = l; onlineJoin(l); } };
 
 // ---------- Werkzeugleiste ----------
 $('bRules').onclick = () => showRules();
@@ -3092,7 +3269,7 @@ $('bCam').onclick = () => {
 };
 
 // ---------- Hauptschleife ----------
-const clock = new THREE.Clock();
+const clock = new THREE.Clock(), NORENDER = Q.has('norender');   // norender: Spiellogik ohne Bildausgabe (Tests)
 let lastHover = 0;
 function loop() {
   const dt = Math.min(clock.getDelta(), .1);
@@ -3100,8 +3277,9 @@ function loop() {
   for (const a of [...anims]) { a.t += dt; a.fn(Math.min(1, a.t / a.dur)); if (a.t >= a.dur) { anims.delete(a); a.res(); } }
   if (anims.size) active = true;
   for (const u of G.units) if (u.playing) { u.rig.mixer.update(dt); active = true; }
+  if (NET.q.length && !NET.running && !G.busy) netPump();
   const now = performance.now(); if (hoverEv && now - lastHover > 40) { lastHover = now; handleHover(); }
-  if (!active) return;
+  if (!active || NORENDER) return;
   dirty = false; renderAll(); placeLabels();
 }
 
@@ -3149,6 +3327,7 @@ if (Q.has('sim')) {
     .then(res => { const pre = document.createElement('pre'); pre.id = 'simresult'; pre.textContent = JSON.stringify(summarize(res)); document.body.append(pre); })
     .catch(e => { const pre = document.createElement('pre'); pre.id = 'simresult'; pre.textContent = JSON.stringify({ error: String(e?.stack || e) }); document.body.append(pre); });
 } else if (Q.has('auto')) { G.speed = +Q.get('auto') || 4; G.sound = false; window.__start('aivai'); }
+else if (/^[A-Z0-9]{5}$/i.test(Q.get('join') ?? '')) { G.mode = 'online'; NET.side = 1; NET.code = Q.get('join').toUpperCase(); TEAMS[1].name = 'Du'; TEAMS[0].name = 'Gegner'; army(1); }
 else if (!Q.has('sim')) menu();
 </script>
 </body>
