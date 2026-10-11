@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Tau-Gefecht</title>
 <style>
 :root{--bg:#121316;--panel:rgba(24,25,30,.92);--panel2:#1d1f25;--fg:#ece8df;--mut:#9b978d;--line:#34363e;--acc:#e8a33d;--p0:#ff8a3d;--p1:#3fb8ff;--ok:#7fd36b;--bad:#ef5b4b}
@@ -10,7 +10,7 @@
 html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
 #stage{position:fixed;inset:0}
 #stage canvas{display:block;width:100%;height:100%;touch-action:none}
-button{font:inherit;color:inherit;cursor:pointer}
+button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation}
 .btn{padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--fg);white-space:nowrap}
 .btn:hover:not(:disabled){border-color:#55575f}
 .btn:disabled{opacity:.4;cursor:default}
@@ -100,7 +100,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .mode:hover{border-color:var(--acc)}
 .mode b{display:block;font-size:16px;margin-bottom:4px}
 .mode span{color:var(--mut);font-size:13px}
-.roster{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:10px;margin:14px 0}
+.roster{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(310px,100%),1fr));gap:10px;margin:14px 0}
 .uc{border:1px solid var(--line);border-radius:12px;padding:12px;background:#0003;display:flex;flex-direction:column;gap:4px}
 .uc.sel{border-color:var(--acc)}
 .uc .top{display:flex;align-items:center;gap:8px}
@@ -131,7 +131,7 @@ abbr{text-decoration:none;border-bottom:1px dotted #8888;cursor:help}
 .opts{display:flex;gap:28px;flex-wrap:wrap;margin:6px 0 4px}
 .opts small{display:block;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;font-size:11px}
 .mdesc{color:var(--mut);font-size:12px;margin:6px 0 0;max-width:460px}
-.stats2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;margin:12px 0 20px}
+.stats2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:18px;margin:12px 0 20px}
 .statcol h3{margin:0 0 8px;font-size:15px;display:flex;align-items:center;gap:8px}
 table.stat{width:100%;border-collapse:collapse;font-size:13px}
 table.stat th{text-align:left;color:var(--mut);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.05em;padding:4px 6px}
@@ -143,7 +143,54 @@ table.stat tr.mvp td{background:#e8a33d14}
 #load{position:fixed;inset:0;display:grid;place-items:center;z-index:20;background:var(--bg);color:var(--mut);font-size:14px}
 @media (max-width:1300px){#card{width:260px;font-size:12px;cursor:pointer}#card .wpn,#card .abil{display:none}#card.open .wpn,#card.open .abil{display:block}#card::after{content:'Antippen für Waffen & Fähigkeiten';display:block;color:var(--mut);font-size:11px;margin-top:4px}#card.open::after{content:''}#logbox{width:240px}#bar{max-width:calc(100vw - 560px)}}
 @media (max-width:1100px){#logbox{width:240px;max-height:26vh}#card{width:260px}}
-@media (max-width:700px){#bar{max-width:calc(100vw - 28px);bottom:auto;top:96px}#logbox{display:none}#top .title{display:none}.stats{grid-template-columns:repeat(3,1fr)}}
+#bMenu,#bLog,#bQuit{display:none}
+.dlg>.row:last-child{position:sticky;z-index:2;bottom:-24px;margin:0 -4px -8px;padding:10px 4px 8px;background:#1d1f25;box-shadow:0 -10px 14px -6px #1d1f25}
+.seg{max-width:100%;overflow-x:auto;scrollbar-width:none}.seg button{flex:none}
+.skip .t{display:none}
+@media (hover:none){.skip .k{display:none}.skip .t{display:inline}}
+/* Telefone (Hochformat) und flache Querformate: kompakte Oberfläche */
+@media (max-width:700px),(max-height:500px){
+  #top{padding:calc(6px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) 6px calc(10px + env(safe-area-inset-left));gap:6px 8px;flex-wrap:nowrap}
+  #top .title,#turn{display:none}
+  #round{font-size:12px;white-space:nowrap}
+  .score{font-size:15px;gap:4px;flex:1;min-width:0}
+  .score .chip{padding:2px 8px;font-size:13px;gap:4px;white-space:nowrap}
+  .score .chip .tn{display:none}
+  #bMenu{display:block;margin-left:auto;padding:6px 12px;font-size:16px}
+  #top .tools{display:none;position:fixed;top:calc(48px + env(safe-area-inset-top));right:calc(10px + env(safe-area-inset-right));flex-direction:column;gap:6px;padding:8px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 30px #0008}
+  #top .tools.open{display:flex}
+  #top .tools{max-height:calc(100vh - 64px - env(safe-area-inset-top));overflow-y:auto}
+  #top .tools .btn{padding:10px 14px;font-size:14px;text-align:left}
+  #bLog,#bQuit{display:block}
+  #logbox{display:none;left:10px;right:10px;width:auto;top:calc(56px + env(safe-area-inset-top));bottom:auto;max-height:55vh;z-index:7}
+  #logbox.show{display:flex}
+  #card{left:10px;right:auto;top:calc(48px + env(safe-area-inset-top));bottom:auto;width:auto;max-width:min(340px,calc(100vw - 20px));padding:8px 10px;font-size:12px}
+  #card h3{font-size:13px}#card .sub{margin-bottom:0}
+  #card .stats{display:none;margin-top:6px}#card.open .stats{display:grid}
+  #card::after{font-size:10px}
+  img.pt.card{width:40px;height:40px}
+  #bar{left:0;right:0;transform:none;top:auto;bottom:0;max-width:none;padding:6px 8px calc(8px + env(safe-area-inset-bottom));gap:6px;background:linear-gradient(#0d0e1100,#0d0e11e6 40%)}
+  #hint{font-size:12px;padding:5px 12px;border-radius:12px;max-width:100%}
+  #acts{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;max-width:100%;padding-bottom:2px;scrollbar-width:none}
+  #acts .btn{padding:10px 14px;flex:none}
+  #acts .btn.pri{order:-1}
+  #dice{top:calc(48px + env(safe-area-inset-top));left:10px;right:10px;min-width:0;padding:8px 10px}
+  body:has(#dice[style*="block"]) #card{display:none!important}
+  .drow{gap:6px;margin:3px 0;min-height:22px}.drow .dl{width:78px;font-size:11px}.drow .dr{min-width:54px;font-size:11px}
+  .die{width:20px;height:20px;font-size:11px}
+  #banner{font-size:22px}
+  .owbar{bottom:calc(110px + env(safe-area-inset-bottom));font-size:12px}
+  .owbar .row{flex-wrap:nowrap;overflow-x:auto}
+  .toast{top:calc(96px + env(safe-area-inset-top));max-width:calc(100vw - 24px);text-align:center}
+  #tip{max-width:min(300px,calc(100vw - 20px))}
+  #modal{padding:10px}
+  .dlg{padding:16px 14px;border-radius:14px}
+  .dlg h1{font-size:24px}.dlg h2{font-size:18px}
+  .dlg>.row:last-child{bottom:-16px}
+  .opts{gap:12px}.modes{gap:8px;margin:12px 0}.mode{padding:12px}
+  .stats{grid-template-columns:repeat(3,1fr)}
+}
+@media (max-height:500px){#top .tools .btn{padding:7px 12px}#card{max-width:300px}#dice{left:auto;width:min(420px,60vw)}#bar{left:50%;right:auto;transform:translateX(-50%);width:min(560px,70vw);background:none}}
 </style>
 <script type="importmap">
 {"imports":{
@@ -160,6 +207,7 @@ table.stat tr.mvp td{background:#e8a33d14}
   <span id="round"></span>
   <div class="score" id="score"></div>
   <div id="turn"></div>
+  <button class="btn" id="bMenu" aria-label="Menü" title="Einstellungen">☰</button>
   <div class="tools">
     <button class="btn" id="bCam" title="Blick von der anderen Tischseite">Seite wechseln</button>
     <button class="btn" id="bFollow" title="Kamera schwenkt zur aktiven Einheit">Kamera folgt: an</button>
@@ -167,6 +215,8 @@ table.stat tr.mvp td{background:#e8a33d14}
     <button class="btn" id="bFx">Grafik: hoch</button>
     <button class="btn" id="bSnd">Ton: an</button>
     <button class="btn" id="bRules">Regeln</button>
+    <button class="btn" id="bLog">Protokoll</button>
+    <button class="btn" id="bQuit">Hauptmenü</button>
   </div>
 </div>
 <div id="card"></div>
