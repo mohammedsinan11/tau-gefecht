@@ -5,3 +5,4 @@ Uebersicht_Modelle.html
 # Testausgaben
 tools/out/
 .DS_Store
+tools/.cache/

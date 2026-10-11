@@ -19,7 +19,12 @@ UI und Texte sind **Deutsch**. Der Besitzer will vor allem ein **hochwertiges, s
 - `tools/sim.sh 200 [params]` – 200 Partien KI gegen KI ohne Animation, JSON-Auswertung (Siegquoten je Seite/Einheit,
   Auslöschungen, Punkteabstand). `tools/sim.sh 150 "greedy=1&diff=schwer"` misst die KI gegen ein simples Referenz-Skript.
 - `tools/render.sh <tag> <id>[:Gehen|Schiessen] …` – 4-Ansichten-Renders nach `tools/out/` (zum Ansehen mit Read)
-- Chrome/Chromium wird von `tools/chrome.sh` gesucht; auf Linux ggf. `npx -y playwright install chromium`.
+- Chrome/Chromium wird von `tools/chrome.sh` gesucht (auch `/opt/pw-browsers`); auf Linux ggf. `npx -y playwright install chromium`.
+- Ohne direkten CDN-Zugriff (Proxy): `npm pack three@0.160.0` nach `tools/.cache/three` entpacken – `tools/cdp-eval.mjs` bedient
+  three.js-Anfragen dann lokal. Renders/Screenshots laufen über `cdp-eval.mjs` (`SHOT=datei.png SIZE=1600,1200`).
+- KI-Vergleich: `tools/sim.sh 300 "ai=schwer,greedy&mirror=1"` (KI-Stufe je Seite, `mirror` = gleiche Armee für beide;
+  immer auch umgekehrt `ai=greedy,schwer` laufen lassen). Gewichte der Schwer-KI per `aiw=thr:.6,dep:.1` (siehe `AIW`).
+  Rauschen bei 600 Partien ≈ ±4 %, also erst ab ~1200 Partien Schlüsse ziehen.
 - Im Spiel gibt es Testhilfen auf `window`: `__G` (Zustand), `__UT` (Profile), `__sim(n, opts)`, `__summarize`, `__start(mode, a, b)`,
   `__cam.project(x,y,z)`, `__finish()`. URL-Parameter: `?sim=N`, `?auto=4` (Zuschauen), `?fx=0`, `?cam=x,y,z,tx,ty,tz`.
 
@@ -31,16 +36,19 @@ UI und Texte sind **Deutsch**. Der Besitzer will vor allem ein **hochwertiges, s
    dazu ein **Tester-Subagent**, der spielt und Bugs/Verbesserungen liefert.
 
 ## Stand (Okt. 2026)
-- Balance ausgeglichen (alle Einheiten ≈ 44–58 %). Befehlspunkte/Taktiken, Abwehrfeuer, 3 Missionen, 3 KI-Stufen,
-  Gelände Standard/gespiegelt, Initiative, Revanche, Endstatistik, Porträts.
+- Balance ausgeglichen (zuletzt 800 Partien: Einheiten 44,5–59 %, Crisis Schild etwas stark, Broadside etwas schwach; Auslöschungen 40 %). Befehlspunkte/Taktiken, Abwehrfeuer, 3 Missionen, 3 KI-Stufen,
+  3 Geländeaufstellungen (Ruinenfeld, Depot, Trümmerstadt, je auch gespiegelt), Überspringen per Leertaste, Initiative, Revanche, Endstatistik, Porträts.
 - Tester-Noten zuletzt: Einstieg 8, Bedienung 7, Taktik 7, Tempo 6, KI 5, Balance 7, Optik 9, Wiederspielwert 7, Stabilität 8, Gesamt 7,5.
 - Gutachter-Noten Figuren: Crisis rot 8/8/8, Stealth 7/6/7, Fire Warrior 8/7/7, Katze 6/6/7, Pathfinder 6/6/7, Crisis blau 7/6/7, Broadside 7/7/7.
 
 ## Offene Aufgaben (priorisiert)
-1. **KI stärker machen**: „Schwer“ gewinnt nur ≈ 55 % gegen das Referenz-Skript (normal ≈ 50 %). Ideen: Fokusfeuer über mehrere
-   Aktivierungen planen, Missionsziele bewusst halten (OC-Rechnung), Aktivierungsreihenfolge optimieren, Abwehrfeuer einplanen.
-2. Spieltempo: Würfel/Kamerafahrten auf „normal“ zäh – straffen, evtl. „Würfel überspringen“.
-3. Mehr Abwechslung: weitere Geländeaufstellungen (nicht nur gespiegelt), evtl. weitere Missionen/Taktiken.
+1. **KI weiter stärken**: „Schwer“ hat jetzt Vorausschau (eigener Zug → schlimmste Gegenantwort → Stellungsbewertung mit
+   Material, Siegpunkten, Zielkontrolle, Tempo-Bedrohung), Abschusswahrscheinlichkeit aus der Schadensverteilung, Fokusfeuer-Bonus
+   und Aufstellung außer Sicht: ≈ 59 % gegen das Referenz-Skript (1200 Partien, vorher 54 %), ≈ 58 % gegen „Normal“.
+   „Normal“ ≈ Referenz-Skript (50 %). Ideen: dritte Ebene (eigene Folgeaktivierung), Missionsziele zum Rundenende gezielt
+   sichern, Abwehrfeuer einplanen, Sprint in die Vorausschau aufnehmen.
+2. Spieltempo: gestrafft + Überspringen (Leertaste/Klick auf Würfel); von einem Tester bestätigen lassen.
+3. Mehr Abwechslung: evtl. weitere Missionen/Taktiken; Auslöschungsquote (40 %) wieder Richtung 30–35 % bringen.
 4. Figuren: Pathfinder-Helm (klar abgesetzter Gesichtskeil statt Kugel), Katze (Vorderbeine schlanker mit Ellenbogen, Stirn rund,
    Ohrstreifen nur außen), Crisis blau Schenkelschale kürzer, Stealth-Kopfbuckel als „Schnabel“.
 5. Mobile Bedienung (Touch, kleine Bildschirme) prüfen.
