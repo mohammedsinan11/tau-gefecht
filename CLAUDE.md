@@ -11,6 +11,7 @@ UI und Texte sind **Deutsch**. Der Besitzer will vor allem ein **hochwertiges, s
 - `src/app.js` + `src/page.html` → **3D_Figuren.html** (Figurenbetrachter, STL/GLB-Export)
 - `src/game.js` + `src/game.html` → **Tau_Gefecht.html** (das Spiel)
 - `build.py` fügt alles zu den zwei HTML-Dateien zusammen (gebaute Dateien sind mit eingecheckt, damit sie per Doppelklick laufen)
+- Veröffentlicht über **GitHub Pages** (Branch `main`, Ordner `/`): `index.html` leitet auf `Tau_Gefecht.html` weiter.
 - `docs/formnotizen.md` Formmerkmale der Originalmodelle
 
 ## Arbeiten
@@ -25,6 +26,10 @@ UI und Texte sind **Deutsch**. Der Besitzer will vor allem ein **hochwertiges, s
 - KI-Vergleich: `tools/sim.sh 300 "ai=schwer,greedy&mirror=1"` (KI-Stufe je Seite, `mirror` = gleiche Armee für beide;
   immer auch umgekehrt `ai=greedy,schwer` laufen lassen). Gewichte der Schwer-KI per `aiw=thr:.6,dep:.1` (siehe `AIW`).
   Rauschen bei 600 Partien ≈ ±4 %, also erst ab ~1200 Partien Schlüsse ziehen.
+- **Online-Spiel** (`src/game.js`, Abschnitt „Online-Spiel“): beide Geräte rechnen dieselbe Partie, übertragen werden nur Aktionen
+  (`act(name, …)` → `ACTIONS`), Würfel über gemeinsamen Startwert (`RNG`/`seeded`; Optik-Zufall bleibt `Math.random`!),
+  Prüfsumme nach jeder Aktivierung. Neue Spieleraktionen immer über `act()` leiten. Verbindung: PeerJS (WebRTC) per CDN,
+  Test ohne Netz: `node tools/net-test.mjs 3` (zwei Fenster, BroadcastChannel `?net=bc`, Zufalls-Bots, prüft Synchronität).
 - Im Spiel gibt es Testhilfen auf `window`: `__G` (Zustand), `__UT` (Profile), `__sim(n, opts)`, `__summarize`, `__start(mode, a, b)`,
   `__cam.project(x,y,z)`, `__finish()`. URL-Parameter: `?sim=N`, `?auto=4` (Zuschauen), `?fx=0`, `?cam=x,y,z,tx,ty,tz`.
 
@@ -37,7 +42,7 @@ UI und Texte sind **Deutsch**. Der Besitzer will vor allem ein **hochwertiges, s
 
 ## Stand (Okt. 2026)
 - Balance ausgeglichen (zuletzt 800 Partien: Einheiten 44,5–59 %, Crisis Schild etwas stark, Broadside etwas schwach; Auslöschungen 40 %). Befehlspunkte/Taktiken, Abwehrfeuer, 3 Missionen, 3 KI-Stufen,
-  3 Geländeaufstellungen (Ruinenfeld, Depot, Trümmerstadt, je auch gespiegelt), Überspringen per Leertaste, Initiative, Revanche, Endstatistik, Porträts.
+  3 Geländeaufstellungen (Ruinenfeld, Depot, Trümmerstadt, je auch gespiegelt), Überspringen per Leertaste, Online-Mehrspieler (Link/Code, PeerJS), Initiative, Revanche, Endstatistik, Porträts.
 - Tester-Noten zuletzt: Einstieg 8, Bedienung 7, Taktik 7, Tempo 6, KI 5, Balance 7, Optik 9, Wiederspielwert 7, Stabilität 8, Gesamt 7,5.
 - Gutachter-Noten Figuren: Crisis rot 8/8/8, Stealth 7/6/7, Fire Warrior 8/7/7, Katze 6/6/7, Pathfinder 6/6/7, Crisis blau 7/6/7, Broadside 7/7/7.
 
@@ -51,4 +56,5 @@ UI und Texte sind **Deutsch**. Der Besitzer will vor allem ein **hochwertiges, s
 3. Mehr Abwechslung: evtl. weitere Missionen/Taktiken; Auslöschungsquote (40 %) wieder Richtung 30–35 % bringen.
 4. Figuren: Pathfinder-Helm (klar abgesetzter Gesichtskeil statt Kugel), Katze (Vorderbeine schlanker mit Ellenbogen, Stirn rund,
    Ohrstreifen nur außen), Crisis blau Schenkelschale kürzer, Stealth-Kopfbuckel als „Schnabel“.
-5. Mobile Bedienung (Touch, kleine Bildschirme) prüfen.
+5. Mobile Bedienung (Touch, kleine Bildschirme) prüfen – wichtig fürs Online-Spiel.
+6. Online: echten Test über zwei Netze (PeerJS-Server/STUN; ohne TURN scheitern manche Mobil-/Firmennetze), evtl. Wiederverbinden.
