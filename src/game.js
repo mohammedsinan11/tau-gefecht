@@ -51,7 +51,8 @@ const OBJ = [{ x: -12 * IN, z: 0 }, { x: 0, z: 0 }, { x: 12 * IN, z: 0 }];
 // ---------- Szene ----------
 const stage = document.getElementById('stage');
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: Q.has('shot') });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+const COARSE = matchMedia('(pointer:coarse)').matches;   // Telefon/Tablet: weniger Pixel, schnelle Grafik als Vorgabe
+renderer.setPixelRatio(Math.min(devicePixelRatio, COARSE ? 1.5 : 1.75));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = .95;
 stage.prepend(renderer.domElement);
@@ -94,6 +95,7 @@ function resize() {
   if (!w || !h) return;
   renderer.setSize(w, h, false); fx.setSize(w, h, renderer.getPixelRatio());
   camera.aspect = w / h; camera.updateProjectionMatrix(); dirty = true;
+  controls.maxDistance = Math.max(2200, 1.3 * .56 * BW / (Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect));
 }
 new ResizeObserver(resize).observe(stage);
 
@@ -659,7 +661,7 @@ function resolve(att, def, w, c) {
 async function showDice(att, def, res, kind) {
   if (G.instant) return;
   const el = $('dice'), sp = 1 / G.speed;
-  el.innerHTML = `<div class="head">${nameOf(att)} → ${nameOf(def)} · <b>${esc(res.w.n)}</b> <span style="color:var(--mut)">${kind === 'fight' ? 'Nahkampf' : `${fmt(res.ctxD ?? 0)}"`}</span><span class="skip" title="Animationen dieser Aktivierung überspringen">⏭ Leertaste</span></div>`;
+  el.innerHTML = `<div class="head">${nameOf(att)} → ${nameOf(def)} · <b>${esc(res.w.n)}</b> <span style="color:var(--mut)">${kind === 'fight' ? 'Nahkampf' : `${fmt(res.ctxD ?? 0)}"`}</span><span class="skip" title="Animationen dieser Aktivierung überspringen">⏭ <span class="k">Leertaste</span><span class="t">überspringen</span></span></div>`;
   el.style.display = 'block';
   const row = async (label, vals, cls, sum) => {
     const r = document.createElement('div'); r.className = 'drow';
@@ -885,6 +887,7 @@ function updateObjectives() {
 
 // ---------- Auswahl und Eingabe des menschlichen Spielers ----------
 function clearSel() {
+  pending = null;
   losLine.visible = false; selRing.visible = false; rangeRing.visible = false; pathLine.visible = false; drawNav(null);
   for (const r of targetRings) overlay.remove(r); targetRings.length = 0;
   $('acts').innerHTML = ''; $('tip').style.display = 'none'; showCard(null); dirty = true;
@@ -933,8 +936,8 @@ function refreshAct() {
   if (u.w < u.T.W && !a.strat && !a.sprint && !(a.startEng && a.moved)) btn('Notreparatur · 2 BP', () => act('rep'), '', cp < 2);
   btn('Aktivierung beenden', () => act('end'), 'pri');
   const parts = [];
-  if (!a.moved) parts.push(a.startEng ? 'Klicke in die Fläche, um dich zurückzuziehen (danach keine Aktion)' : `Bewegen: bis ${a.maxMove}" in die farbige Fläche klicken`);
-  if (nT) parts.push(a.markMode ? 'Ziel zum Markieren anklicken' : engagedAt(u, u).length ? 'Gegner im Nahkampf anklicken' : 'Gegner mit rotem Ring anklicken zum Schießen');
+  if (!a.moved) parts.push(a.startEng ? `${COARSE ? 'Tippe' : 'Klicke'} in die Fläche, um dich zurückzuziehen (danach keine Aktion)` : `Bewegen: bis ${a.maxMove}" in die farbige Fläche ${COARSE ? 'tippen' : 'klicken'}`);
+  if (nT) { const an = COARSE ? 'antippen' : 'anklicken'; parts.push(a.markMode ? `Ziel zum Markieren ${an}` : engagedAt(u, u).length ? `Gegner im Nahkampf ${an}` : `Gegner mit rotem Ring ${an} zum Schießen`); }
   else if (a.moved) parts.push('Kein Ziel in Reichweite und Sicht – Aktivierung beenden');
   if (a.strat) parts.push(a.strat === 'reroll' ? 'Gezieltes Feuer: Fehlwürfe beim Treffen werden wiederholt' : 'Überladung: Durchschlag +1');
   setHint(`${nameOf(u)}: ${parts.join(' · ')}`);
@@ -1042,16 +1045,38 @@ renderer.domElement.addEventListener('pointerup', e => {
   if (G.busy) return;
   const p = pick(e);
   if (G.phase === 'deploy') return deployClick(p);
-  if (G.phase !== 'play' || notMine(G.turn) || NET.running) return;
+  // Touch: Es gibt kein Überfahren mit der Maus – der erste Tipp zeigt die Vorschau (Trefferchancen bzw. Weg), der zweite bestätigt
+  const touch = e.pointerType !== 'mouse';
+  if (G.phase !== 'play' || notMine(G.turn) || NET.running) { if (touch && p.unit) showCard(p.unit, true); return; }
   const a = G.act;
-  if (p.unit && p.unit.side !== G.turn && a) { if (validTarget(p.unit)) act('tgt', G.units.indexOf(p.unit)); return; }
+  if (p.unit && p.unit.side !== G.turn && a) {
+    if (!validTarget(p.unit)) { if (touch) showCard(p.unit, true); return; }
+    if (touch && pending?.k !== 't' + p.unit.id) { pending = null; hoverEv = e; handleHover(); pending = { k: 't' + p.unit.id }; tipNote('Nochmal tippen zum Angreifen'); return; }
+    act('tgt', G.units.indexOf(p.unit)); return;
+  }
   if (p.unit && p.unit.side === G.turn && !p.unit.done && (!a || !a.moved) && p.unit !== a?.u) { act('sel', G.units.indexOf(p.unit)); return; }
+  if (touch && p.unit && (!a || p.unit !== a.u)) { showCard(p.unit, true); return; }
   if (a && !a.moved && p.ground && a.nav) {
-    const [k, m] = cellOf(p.ground.x, p.ground.z);
-    if (k >= 0 && m >= 0 && k < NX && m < NZ && a.nav.ok(m * NX + k)) act('mv', m * NX + k);
+    const [k, m] = cellOf(p.ground.x, p.ground.z), j = m * NX + k;
+    if (!(k >= 0 && m >= 0 && k < NX && m < NZ && a.nav.ok(j))) return;
+    if (touch && !(pending?.k === 'm' && Math.abs(pending.j % NX - k) <= 2 && Math.abs(Math.floor(pending.j / NX) - m) <= 2)) {
+      pending = null; hoverEv = e; handleHover(); pending = { k: 'm', j }; tipNote('Nochmal tippen zum Bewegen'); return;
+    }
+    act('mv', touch ? pending.j : j);
   }
 });
-renderer.domElement.addEventListener('dblclick', e => { const p = pick(e); if (p.unit) focusOn(p.unit); });
+renderer.domElement.addEventListener('dblclick', e => { if (pending || matchMedia('(hover:none)').matches) return; const p = pick(e); if (p.unit) focusOn(p.unit); });
+let pending = null;
+// Tooltip neben dem Zeiger; bei Touch über dem Finger und immer im Bild
+function placeTip(e) {
+  const tip = $('tip'); tip.style.display = 'block';
+  const touch = e.pointerType && e.pointerType !== 'mouse', w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = e.clientX + 16, y = touch ? e.clientY - h - 28 : e.clientY + 12;
+  if (x + w > innerWidth - 8) x = Math.max(8, innerWidth - w - 8);
+  if (y < 8) y = e.clientY + 28; if (y + h > innerHeight - 8) y = Math.max(8, innerHeight - h - 8);
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+function tipNote(t) { const tip = $('tip'); if (tip.style.display !== 'block') return; tip.insertAdjacentHTML('beforeend', `<div style="margin-top:6px;color:var(--acc);font-weight:700">${t}</div>`); }
 function focusOn(u, dist = 260) {
   const t0 = controls.target.clone(), c0 = camera.position.clone(), t1 = new THREE.Vector3(u.x, u.h * .45, u.z);
   const dir = c0.clone().sub(t0).normalize(), c1 = t1.clone().addScaledVector(dir, dist);
@@ -1064,8 +1089,8 @@ function follow(x, z) {
   tween(.8, k => { const e = k * k * (3 - 2 * k); controls.target.copy(t0).addScaledVector(d, e); camera.position.copy(c0).addScaledVector(d, e); });
 }
 let hoverEv = null;
-renderer.domElement.addEventListener('pointermove', e => { hoverEv = e; });
-renderer.domElement.addEventListener('pointerleave', () => { hoverEv = null; $('tip').style.display = 'none'; });
+renderer.domElement.addEventListener('pointermove', e => { if (e.pointerType === 'mouse' || e.buttons) hoverEv = e; });
+renderer.domElement.addEventListener('pointerleave', e => { if (e.pointerType !== 'mouse') return; hoverEv = null; $('tip').style.display = 'none'; });   // Touch: Vorschau stehen lassen
 function handleHover() {
   const e = hoverEv; if (!e) return; hoverEv = null;
   const tip = $('tip'); tip.style.display = 'none'; losLine.visible = false;
@@ -1088,7 +1113,7 @@ function handleHover() {
         html = `<b>Nahkampf – ${esc(w.n)}</b>: ⌀ ${fmt(expect(a.u, p.unit, w, c))} Schaden<br><span style="color:var(--mut)">Der Gegner schlägt danach zurück.</span>`;
       } else if (k === 'mark') html = '<b>Markerlicht</b>: +1 auf Treffer gegen dieses Ziel bis Rundenende, keine Deckung.';
       else { const c = ctxOf(a.u, p.unit, 'shoot'); html = `<span style="color:var(--mut)">Kein gültiges Ziel${!c.vis ? ' – keine Sichtlinie' : a.u.T.guns.length && !gunsInRange(a.u, c).length ? ` – außer Reichweite (${fmt(c.d)}")` : ''}</span>`; }
-      tip.innerHTML = html; tip.style.display = 'block'; tip.style.left = (e.clientX + 16) + 'px'; tip.style.top = (e.clientY + 12) + 'px';
+      tip.innerHTML = html; placeTip(e);
     }
   } else showCard(a?.u ?? null);
   // Pfadvorschau
@@ -1098,7 +1123,7 @@ function handleHover() {
     if (k >= 0 && m >= 0 && k < NX && m < NZ && a.nav.ok(j)) {
       const pts = pathTo(a.u, a.nav, j);
       pathLine.geometry.setFromPoints(pts.map(q => new THREE.Vector3(q.x, 1.2, q.z))); pathLine.visible = true;
-      tip.innerHTML = `${fmt(a.nav.dist[j] / IN)}" von ${a.maxMove}"`; tip.style.display = 'block'; tip.style.left = (e.clientX + 16) + 'px'; tip.style.top = (e.clientY + 12) + 'px';
+      tip.innerHTML = `${fmt(a.nav.dist[j] / IN)}" von ${a.maxMove}"`; placeTip(e);
     }
   }
   dirty = true;
@@ -1367,7 +1392,10 @@ function inZone(side, z) { return side === 0 ? z > BD / 2 - ZONE * IN : z < -BD 
 // Kamera hinter die Tischkante einer Seite fliegen (0 = vorne/+z)
 function homeView(side = 0, dur = 1.2) {
   controls.autoRotate = false;
-  const sg = side === 0 ? 1 : -1, t0 = controls.target.clone(), c0 = camera.position.clone(), t1 = new THREE.Vector3(0, 0, 60 * sg), c1 = new THREE.Vector3(0, 760, 900 * sg);
+  const sg = side === 0 ? 1 : -1, t0 = controls.target.clone(), c0 = camera.position.clone(), t1 = new THREE.Vector3(0, 0, 60 * sg);
+  // Abstand so, dass die Tischbreite ins Bild passt (Hochformat: bis über die äußeren Ziele, steiler von oben)
+  const half = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect, d = Math.max(1180, (camera.aspect < 1 ? .44 : .56) * BW / half), el = camera.aspect < 1 ? .95 : .70;
+  const c1 = new THREE.Vector3(0, Math.sin(el) * d, Math.cos(el) * d * sg);
   return tween(dur, k => { const e = k * k * (3 - 2 * k); controls.target.lerpVectors(t0, t1, e); camera.position.lerpVectors(c0, c1, e); });
 }
 function startDeploy() {
@@ -1377,6 +1405,7 @@ function startDeploy() {
   for (const s of [0, 1]) for (const t of G.lists[s].slice().sort((a, b) => UT[b].pts - UT[a].pts)) G.units.push(makeUnit(t, s));
   const q = [[], []]; for (const u of G.units) q[u.side].push(u);
   G.deployQ = []; while (q[0].length || q[1].length) { if (q[0].length) G.deployQ.push(q[0].shift()); if (q[1].length) G.deployQ.push(q[1].shift()); }
+  if (COARSE && innerHeight > innerWidth && !G.portraitTip) { G.portraitTip = true; setTimeout(() => toast('Tipp: Im Querformat siehst du mehr vom Schlachtfeld.'), 1500); }
   log('Aufstellung', 'r'); log(`Gelände: ${TERRAINS[tid].name}${LAYOUT.mirror ? ' (gespiegelt)' : ''}`); updateHud(); nextDeploy();
 }
 async function nextDeploy() {
@@ -1407,7 +1436,7 @@ async function nextDeploy() {
   } else if (G.autoDep?.[u.side]) {
     for (let i = 0; i < 400; i++) { const x = (Math.random() - .5) * (BW - 2 * u.r), z = (u.side ? -1 : 1) * (BD / 2 - u.r - Math.random() * (ZONE * IN - 2 * u.r)); if (freeSpot(u, x, z)) { setTimeout(() => act('place', G.units.indexOf(u), x, z), 60); return; } }
   } else {
-    setHint(`<b style="color:${TEAMS[u.side].col}">${TEAMS[u.side].name}</b>: Stelle ${nameOf(u)} in deiner Zone auf (Klick). <button class="btn" id="autoDep" style="pointer-events:auto;margin-left:8px;padding:3px 10px">Rest automatisch</button>`);
+    setHint(`<b style="color:${TEAMS[u.side].col}">${TEAMS[u.side].name}</b>: Stelle ${nameOf(u)} in deiner Zone auf (${COARSE ? 'Tippen' : 'Klick'}). <button class="btn" id="autoDep" style="pointer-events:auto;margin-left:8px;padding:3px 10px">Rest automatisch</button>`);
     $('autoDep').onclick = autoDeploy;
     u.holder.visible = false;
   }
@@ -1439,7 +1468,7 @@ function autoDeploy() {
 // ---------- Anzeige ----------
 function toast(t) { const d = document.createElement('div'); d.className = 'toast'; d.textContent = t; document.body.append(d); setTimeout(() => d.remove(), 3200); }
 function setHint(h) { $('hint').innerHTML = h; $('hint').style.display = h ? '' : 'none'; }
-const scoreHtml = () => G.phase === 'deploy' ? '' : [0, 1].map(s => `<span class="chip" title="Siegpunkte · Befehlspunkte"><i class="dot" style="background:${TEAMS[s].col}"></i>${TEAMS[s].name} <b>${G.vp[s]}</b><small class="cp">${G.cp ? `${G.cp[s]} BP` : ''}</small></span>`).join('');
+const scoreHtml = () => G.phase === 'deploy' ? '' : [0, 1].map(s => `<span class="chip" title="Siegpunkte · Befehlspunkte"><i class="dot" style="background:${TEAMS[s].col}"></i><span class="tn">${TEAMS[s].name}</span> <b>${G.vp[s]}</b><small class="cp">${G.cp ? `${G.cp[s]} BP` : ''}</small></span>`).join('');
 function updateHud() {
   $('round').textContent = G.phase === 'play' || G.phase === 'end' ? `Runde ${Math.min(G.round, ROUNDS)} / ${ROUNDS}` : G.phase === 'deploy' ? 'Aufstellung' : '';
   $('score').innerHTML = G.phase === 'menu' ? '' : scoreHtml();
@@ -1525,7 +1554,7 @@ const RULES = `<div class="rules">
 <li><b>Schaden</b>: Jede nicht gerettete Wunde kostet SC Lebenspunkte.</li></ul>
 <h3>Sicht und Deckung</h3><p>Sicht besteht, wenn mindestens einer von vier Punkten der Zielfigur frei sichtbar ist. Ist sie nur teilweise sichtbar, hat sie Deckung. Fenster in Ruinen lassen Sicht durch.</p>
 <h3>Nahkampf</h3><p>Bewege dich in 1" an einen Gegner und klicke ihn an. Überlebt er, schlägt er sofort zurück.</p>
-<h3>Bedienung</h3><p>Linke Maustaste ziehen: drehen · Rechte Maustaste: verschieben · Mausrad: zoomen · Doppelklick auf eine Figur: heranzoomen. Fahre über einen Gegner, um Sichtlinie (grün frei, gelb Deckung), Trefferchancen und erwarteten Schaden zu sehen. Eine Bewegung lässt sich zurücknehmen, solange noch nicht angegriffen wurde.</p></div>`;
+<h3>Bedienung</h3>${COARSE ? '<p>Ein Finger: drehen · Zwei Finger: zoomen und verschieben. Gegner oder Zielfeld einmal antippen zeigt Trefferchancen bzw. den Weg, nochmal tippen bestätigt. Figuren antippen zeigt ihre Werte; Einstellungen, Protokoll und Hauptmenü stecken hinter ☰.</p>' : ''}<p>Linke Maustaste ziehen: drehen · Rechte Maustaste: verschieben · Mausrad: zoomen · Doppelklick auf eine Figur: heranzoomen. Fahre über einen Gegner, um Sichtlinie (grün frei, gelb Deckung), Trefferchancen und erwarteten Schaden zu sehen. Eine Bewegung lässt sich zurücknehmen, solange noch nicht angegriffen wurde.</p></div>`;
 function showRules() { modal(`<h2>Regeln</h2>${RULES}<div class="row" style="margin-top:14px"><span class="grow"></span><button class="btn pri" id="rOk">Verstanden</button></div>`, d => d.querySelector('#rOk').onclick = () => { closeModal(); }); }
 function menu() {
   G.phase = 'menu'; controls.autoRotate = true; controls.autoRotateSpeed = .5;
@@ -1753,6 +1782,17 @@ window.__net = { act, autoDeploy, validTarget: e => validTarget(e), randomList: 
 
 // ---------- Werkzeugleiste ----------
 $('bRules').onclick = () => showRules();
+// Kompakte Oberfläche (Telefon): Werkzeuge hinter ☰, Protokoll als Overlay, zurück ins Hauptmenü
+$('bMenu').onclick = e => { e.stopPropagation(); document.querySelector('#top .tools').classList.toggle('open'); };
+document.querySelector('#top .tools').addEventListener('click', () => document.querySelector('#top .tools').classList.remove('open'));
+addEventListener('pointerdown', e => { if (!e.target.closest?.('#top')) document.querySelector('#top .tools').classList.remove('open'); });
+$('bLog').onclick = () => { $('logbox').classList.toggle('show'); $('logbox').classList.remove('min'); };
+$('bQuit').onclick = () => {
+  if (G.phase === 'menu') return;
+  if (['deploy', 'play'].includes(G.phase) && !confirm('Laufende Partie beenden und zum Hauptmenü?')) return;
+  if (G.mode === 'online') { netClose(); return; }
+  G.busy = false; clearUnits(); $('log').innerHTML = ''; G.vp = [0, 0]; menu(); updateHud();
+};
 $('bFollow').onclick = () => { G.follow = !G.follow; $('bFollow').textContent = 'Kamera folgt: ' + (G.follow ? 'an' : 'aus'); };
 const setSpeed = v => { G.speed = v; $('bSpeed').textContent = 'Tempo: ' + ({ 1: 'normal', 2: 'schnell', 4: 'sehr schnell' })[G.speed]; try { localStorage.setItem('tauSpeed', v); } catch {} };
 $('bSpeed').onclick = () => setSpeed(G.speed === 1 ? 2 : G.speed === 2 ? 4 : 1);
@@ -1806,7 +1846,7 @@ async function simulate(n = 50, opts = {}) {
 }
 window.__sim = simulate; window.__finish = () => { G.instant = false; finish(); };
 window.__G = G; window.__UT = UT; window.__dbg = { navPlane, navCv, navTex, overlay, setLayout }; window.__cam = { camera, controls, project: (x, y, z) => { const v = new THREE.Vector3(x, y, z).project(camera), r = renderer.domElement.getBoundingClientRect(); return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height]; }, dirty: () => { dirty = true; } }; window.__start = (mode, a, b) => { G.mode = mode; G.lists = [a ?? randomList(), b ?? randomList()]; if (mode === 'aivai') { TEAMS[0].name = 'Computer A'; TEAMS[1].name = 'Computer B'; } closeModal(); startDeploy(); };
-if (Q.get('fx') === '0') { G.fx = false; $('bFx').textContent = 'Grafik: schnell'; }
+if (Q.get('fx') === '0' || (COARSE && Q.get('fx') !== '1')) { G.fx = false; $('bFx').textContent = 'Grafik: schnell'; }
 if (Q.has('cam')) { const c = Q.get('cam').split(',').map(Number); camera.position.set(c[0], c[1], c[2]); controls.target.set(c[3], c[4], c[5]); }
 // Auswertung vieler Simulationen: Siegquoten je Seite und Einheit, Auslöschungen, Punkteabstand
 function summarize(res) {

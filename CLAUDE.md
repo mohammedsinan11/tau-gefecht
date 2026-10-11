@@ -31,7 +31,7 @@ UI und Texte sind **Deutsch**. Der Besitzer will vor allem ein **hochwertiges, s
   Prüfsumme nach jeder Aktivierung. Neue Spieleraktionen immer über `act()` leiten. Verbindung: PeerJS (WebRTC) per CDN,
   Test ohne Netz: `node tools/net-test.mjs 3` (zwei Fenster, BroadcastChannel `?net=bc`, Zufalls-Bots, prüft Synchronität).
 - Im Spiel gibt es Testhilfen auf `window`: `__G` (Zustand), `__UT` (Profile), `__sim(n, opts)`, `__summarize`, `__start(mode, a, b)`,
-  `__cam.project(x,y,z)`, `__finish()`. URL-Parameter: `?sim=N`, `?auto=4` (Zuschauen), `?fx=0`, `?cam=x,y,z,tx,ty,tz`.
+  `__cam.project(x,y,z)`, `__finish()`. Telefon-Screenshots: `MOBILE=390x844 SHOT=… node tools/cdp-eval.mjs …`. URL-Parameter: `?sim=N`, `?auto=4` (Zuschauen), `?fx=0`, `?cam=x,y,z,tx,ty,tz`.
 
 ## Bewährter Ablauf (Qualitätsschleife)
 1. Änderung bauen → `tools/check.sh`
@@ -56,5 +56,7 @@ UI und Texte sind **Deutsch**. Der Besitzer will vor allem ein **hochwertiges, s
 3. Mehr Abwechslung: evtl. weitere Missionen/Taktiken; Auslöschungsquote (40 %) wieder Richtung 30–35 % bringen.
 4. Figuren: Pathfinder-Helm (klar abgesetzter Gesichtskeil statt Kugel), Katze (Vorderbeine schlanker mit Ellenbogen, Stirn rund,
    Ohrstreifen nur außen), Crisis blau Schenkelschale kürzer, Stealth-Kopfbuckel als „Schnabel“.
-5. Mobile Bedienung (Touch, kleine Bildschirme) prüfen – wichtig fürs Online-Spiel.
+5. Mobil: kompakte Oberfläche (≤700 px breit oder ≤500 px hoch: ☰-Menü, Aktionsleiste unten, kompakte Karte), Touch mit
+   Vorschau-Tipp + Bestätigungs-Tipp, Grafik „schnell“ als Vorgabe. Offen: Test auf echten Geräten (iOS Safari/Android Chrome),
+   evtl. gedrehte Hochformat-Ansicht (Tisch längs), Aufstellung per Touch mit Vorschau.
 6. Online: echten Test über zwei Netze (PeerJS-Server/STUN; ohne TURN scheitern manche Mobil-/Firmennetze), evtl. Wiederverbinden.

@@ -1,6 +1,6 @@
 // cdp-eval.mjs <url> <js-ausdruck> [timeout_s] – öffnet die Seite in kopflosem Chrome (DevTools-Protokoll, ohne Zusatzpakete),
 // wertet den Ausdruck wiederholt aus, bis er einen Wert ungleich null/undefined liefert, und gibt ihn aus. Braucht Node ≥ 22.
-// Umgebung: SHOT=datei.png speichert danach ein Bildschirmfoto, SIZE=1600,1200 setzt die Fenstergröße.
+// Umgebung: SHOT=datei.png speichert danach ein Bildschirmfoto, SIZE=1600,1200 setzt die Fenstergröße, MOBILE=390x844 emuliert ein Telefon.
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -34,6 +34,13 @@ if (existsSync(join(threeDir, 'build'))) {
     else send('Fetch.continueRequest', { requestId: d.params.requestId });
   });
   await send('Fetch.enable', { patterns: [{ urlPattern: '*cdn.jsdelivr.net/npm/three@*' }] });
+}
+// MOBILE=390x844 emuliert ein Telefon (Touch, Pixeldichte 3, mobiler Viewport)
+if (process.env.MOBILE) {
+  const [w, h] = process.env.MOBILE.split('x').map(Number);
+  await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 2, mobile: true });
+  await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+  await send('Emulation.setUserAgentOverride', { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' });
 }
 await send('Runtime.enable'); await send('Page.enable'); await send('Page.navigate', { url });
 for (;;) {
