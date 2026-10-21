@@ -18,21 +18,21 @@ function pathfinder() {
     mesh(new THREE.CylinderGeometry(3.3, 5.4, 7.6, 9, 2, true, t0, tl), cloth, rig.s('pelvis'), [0, 13.3, .2]).userData.noFx = true;
   B(rig.s('pelvis'), 6, .8, 4.2, '#3a2f22', [0, 17, .1], undefined, { round: .3 });
   // Helm: dunkel mit weißem Sichtband und rotem Zielsensor
-  tauHelmet(rig.s('head'), k, { color: '#2c2f52', color2: '#2c2f52', eye: true, long: 1.25 });
+  tauHelmet(rig.s('head'), k, { color: '#2c2f52', color2: '#2c2f52', face: '#353a66', band: '#d8d6cf', eye: true, long: .75, wedge: true });
   // Rail Rifle im Anschlag an der rechten Schulter, ca. 22° nach oben
   const w = trooperGun(rig, [-1.6, 22.2, 4.4], [9.6, 38.6, 30], railRifle, k);
   trooperArm(rig, k, -1, wpt(w, [0, -1.7, -.3]));
   trooperArm(rig, k, 1, wpt(w, [0, -1.5, 5.6]));
   // Antenne am Rückenmodul
   rig.j.root.position.y = -2.8;
-  rig.j.head.rotation.set(.12, -.2, 0);
+  rig.j.head.rotation.set(.12, .12, 0);
   rig.walk = { period: .9, stride: 4.6, lift: 1.6, bob: .4, sway: .1, armSwing: 0, rise: .9, extra: p => ({ gun: [.05 * Math.sin(Math.PI * 4 * p), .04 * Math.sin(Math.PI * 2 * p), 0] }) };
   rig.shoot = { period: 1.4 };
   const dir = V([9.6, 38.6, 30]).sub(V([-1.6, 22.2, 4.4])).toArray(), back = V(dir).normalize().multiplyScalar(-1.4).toArray();
   rig.kicks.push({ joint: 'gun', at: 0, pos: back, lift: [dir, .17], torso: .14, decay: 5 }, { joint: 'shoulder_R', at: 0, lift: [dir, .14], decay: 5 },
     { joint: 'shoulder_L', at: 0, lift: [dir, .14], decay: 5 }, { joint: 'head', at: 0, rot: [-.14, 0, 0], decay: 5 });
   rig.j.torso.rotation.set(.3, -.15, 0);
-  rig.j.head.rotation.x += .3;
+  rig.j.head.rotation.x += .18;
   rig.finalize();
   return g;
 }

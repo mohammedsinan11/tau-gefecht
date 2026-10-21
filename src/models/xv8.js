@@ -20,11 +20,16 @@ function xv8(rig, k) {
     B(th, 5.6, 5.4, L1, D, [0, 0, L1 / 2]);
     for (let i = 0; i < 4; i++) B(th, 5.9, .55, 1, '#34363a', [0, -.6, L1 * (.22 + i * .17)], undefined, { round: .2 });
     // gewölbte Oberschenkelschale vorn/außen, mit dunkler Fuge und Randlinie
-    const tp = shell(th, [[L1 * .02, 3.4], [L1 * .14, 4.0], [L1 * .5, 3.8], [L1 * .82, 3.2], [L1 * .97, 2.4]], 1.3, k.thighPlate, [s * .7, 2.7, 0], [0, 0, 0], { arch: 2.2, bow: .9 });
-    for (const z of [L1 * .3, L1 * .62]) loftRing(tp, z, .1, D, Math.PI * .58, Math.PI * .92, 10, -.04);
-    B(th, 1.1, 5, L1 * .65, k.thighPlate, [s * 3.2, .6, L1 * .45]);
+    const tl = k.thighLen ?? 1;   // Anteil der Schenkellänge, den die Schale bedeckt (darunter bleibt die Kniemechanik frei)
+    const tp = shell(th, [[L1 * .02, 3.4], [L1 * .14, 4.0], [L1 * .5 * tl, 3.8], [L1 * .82 * tl, 3.2], [L1 * .97 * tl, 2.4]], 1.3, k.thighPlate, [s * .7, 2.7, 0], [0, 0, 0], { arch: 2.2, bow: .9 });
+    for (const z of [L1 * .3 * tl, L1 * .62 * tl]) loftRing(tp, z, .1, D, Math.PI * .58, Math.PI * .92, 10, -.04);
+    B(th, 1.1, 5, L1 * .65 * tl, k.thighPlate, [s * 3.2, .6, L1 * .45 * tl]);
     for (let i = 0; i < 2; i++) B(th, .3, 2.6, .4, '#1a1b1d', [s * 3.8, .6, L1 * (.35 + i * .2)], undefined, { round: 0 });
     B(th, .9, .9, L1 * .55, METAL, [0, -3, L1 * .5], undefined, { m: .5, r: .4 });
+    if (k.kneePiston) for (const dx of [-1.4, 1.4]) {   // freiliegende Kniemechanik unter der kurzen Schale: zwei Kolben vorn
+      C(th, .55, .55, L1 * .4, '#3a3d42', [dx, 2.2, L1 * .76], [Math.PI / 2, 0, 0], { seg: 12 });
+      C(th, .32, .32, L1 * .3, METAL, [dx, 2.2, L1 * .9], [Math.PI / 2, 0, 0], { seg: 10, m: .6, r: .35 });
+    }
     S(gk, 2.4, D, knee); C(gk, 2.3, 2.3, 5.4, '#3a3d42', knee, [0, 0, Math.PI / 2], { seg: 20 });
     // Schienbein: großer, nach unten schmaler werdender Panzer, Knieplatte, Akzent, Waden
     const sh = limb(gk, knee, ank), L2 = sh.len;
@@ -211,7 +216,7 @@ function longGun(w) {
 function crisisBlue() {
   const g = new THREE.Group(), tan = '#bba277', tan2 = '#a88f68';
   const k = { main: tan, main2: tan2, pad: tan, pad2: tan2, upper: '#33363b', dark: '#25262a',
-    knee: tan, shin: tan, shin2: tan2, shinAcc: tan, shinBand: '#25262a', calf: '#33363b', foot: tan, thighPlate: tan,
+    knee: tan, shin: tan, shin2: tan2, shinAcc: tan, shinBand: '#25262a', calf: '#33363b', foot: tan, thighPlate: tan, thighLen: .56, kneePiston: true,
     plate: '#3a3d42', head: '#2c2f33', eye: '#d0302a', antenna: true, headW: 5, port: false, lean: .22, twist: .28, slits: false, padL: '#2c2f33', emblem: '#c8232c',
     legs: { '-1': [[-5.2, 28, 0], [-9, 20, 10], [-10, 9, 5.5]], '1': [[5.2, 28, 0], [8.6, 17.8, -1.5], [9.8, 8.6, -11]] } };
   const rig = new Rig(g);

@@ -134,16 +134,27 @@ function tauHelmet(h0, k, o = {}) {
     { z: 3.35, w: .6, h: .25, hb: .85, y: 24.0, e: 2.6 },
     { z: 3.45, w: .1, h: .1, hb: .1, y: 23.9 },
   ].map(sh), c, [0, 0, 0], [0, 0, 0], { n: 48, sub: 5 });
+  // Gesichtskeil (o.wedge): flache, fünfeckige Platte, die schräg nach vorn-unten bis zum spitzen Kinn aus der Kuppel tritt
+  if (o.wedge) {
+    const W = o.wedge === true ? 1 : o.wedge, fg = new THREE.Group(); fg.position.set(0, 24.45, 2.75 * L + .75); fg.rotation.set(-1.0, 0, 0); fg.scale.setScalar(1.15); h0.add(fg);
+    prism(fg, [[-2.05 * W, 1.7], [2.05 * W, 1.7], [2.3 * W, .3], [1.25 * W, -1.6], [0, -2.35], [-1.25 * W, -1.6], [-2.3 * W, .3]], .9, cf, [0, 0, 0], undefined, { bevel: .22, cham: .35 });
+    prism(fg, [[-.18, .05], [.18, .05], [.18, -2.1], [0, -2.25], [-.18, -2.1]], .4, c2, [0, 0, .55], undefined, { bevel: .08, cham: .1 });   // Mittelgrat (unter dem Visier)
+    B(fg, 3.3 * W, .4, .3, k.visor ?? '#2f3247', [0, .55, .5], undefined, { round: .1, r: .25 });                                      // Sichtschlitz
+    B(fg, 3.5 * W, .14, .2, o.band ?? c2, [0, .9, .55], undefined, { round: .05 });
+    for (const sg of [-1, 1]) B(fg, .9, .22, .2, '#1a1b1d', [sg * 1.35 * W, -.7, .5], [0, 0, sg * -.5], { round: .05 });            // Atemschlitze
+  }
   // Gesichtsplatte in eigener Farbe: etwas größere Schale nur über die Vorderseite
-  if (cf !== c) loft(h0, [
+  else if (cf !== c) loft(h0, [
     { z: 1.0, w: .1, h: .1, hb: .1, y: 24.6 }, { z: 1.4, w: 2.12, h: 1.4, hb: 2.02, y: 25.2, e: 3.0 }, { z: 2.1, w: 1.8, h: 1.0, hb: 2.0, y: 24.9, e: 3.2 },
     { z: 2.9, w: 1.25, h: .55, hb: 1.65, y: 24.4, e: 3.0 }, { z: 3.4, w: .62, h: .28, hb: .9, y: 24.0, e: 2.6 }, { z: 3.5, w: .1, h: .1, hb: .1, y: 23.9 }].map(sh), cf, [0, 0, 0], [0, 0, 0], { n: 48, sub: 4 });
   // Visier: dunkler, schmaler Schlitz quer über die Gesichtsschräge, mit hellem Rahmen
-  const vs = onSurf(hm, 2.05 * L, Math.PI / 2, 0);
-  B(vs, 3.1, .48, .34, k.visor ?? '#2f3247', [0, 0, .05], undefined, { round: .12, r: .25 });
-  B(vs, 3.3, .14, .2, c2, [0, .32, .08], undefined, { round: .05 });
-  loftLine(hm, -Math.PI / 2, -1.2, 3.1, .1, '#2a2b2e', 24, -.02);                 // Kinnnaht
-  for (const sgn of [-1, 1]) loftRing(hm, 1.0, .09, '#2a2b2e', Math.PI / 2 + sgn * .15, Math.PI / 2 + sgn * 1.45, 16, -.02);   // Gesichtskante
+  if (!o.wedge) {
+    const vs = onSurf(hm, 2.05 * L, Math.PI / 2, 0);
+    B(vs, 3.1, .48, .34, k.visor ?? '#2f3247', [0, 0, .05], undefined, { round: .12, r: .25 });
+    B(vs, 3.3, .14, .2, c2, [0, .32, .08], undefined, { round: .05 });
+    loftLine(hm, -Math.PI / 2, -1.2, 3.1, .1, '#2a2b2e', 24, -.02);                 // Kinnnaht
+    for (const sgn of [-1, 1]) loftRing(hm, 1.0, .09, '#2a2b2e', Math.PI / 2 + sgn * .15, Math.PI / 2 + sgn * 1.45, 16, -.02);   // Gesichtskante
+  }
   // Nackenschutz hinten unten
   side(h0, [[-3.3, 23.2], [-1.2, 23.3], [-1.3, 24.6], [-3.0, 25.0]], 4.4, c2, undefined, undefined, { bevel: .2, cham: .4 });
   // Sensorkapsel links mit drei Linsen, Halterung
