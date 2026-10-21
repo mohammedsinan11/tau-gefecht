@@ -1309,8 +1309,8 @@ function tauHelmet(h0, k, o = {}) {
   if (o.wedge) {
     const W = o.wedge === true ? 1 : o.wedge, fg = new THREE.Group(); fg.position.set(0, 24.45, 2.75 * L + .75); fg.rotation.set(-1.0, 0, 0); fg.scale.setScalar(1.15); h0.add(fg);
     prism(fg, [[-2.05 * W, 1.7], [2.05 * W, 1.7], [2.3 * W, .3], [1.25 * W, -1.6], [0, -2.35], [-1.25 * W, -1.6], [-2.3 * W, .3]], .9, cf, [0, 0, 0], undefined, { bevel: .22, cham: .35 });
-    prism(fg, [[-.18, 1.2], [.18, 1.2], [.18, -2.1], [0, -2.25], [-.18, -2.1]], .4, c2, [0, 0, .55], undefined, { bevel: .08, cham: .1 });   // Mittelgrat
-    B(fg, 3.3 * W, .5, .3, k.visor ?? '#2f3247', [0, .55, .5], undefined, { round: .1, r: .25 });                                      // Sichtschlitz
+    prism(fg, [[-.18, .05], [.18, .05], [.18, -2.1], [0, -2.25], [-.18, -2.1]], .4, c2, [0, 0, .55], undefined, { bevel: .08, cham: .1 });   // Mittelgrat (unter dem Visier)
+    B(fg, 3.3 * W, .4, .3, k.visor ?? '#2f3247', [0, .55, .5], undefined, { round: .1, r: .25 });                                      // Sichtschlitz
     B(fg, 3.5 * W, .14, .2, o.band ?? c2, [0, .9, .55], undefined, { round: .05 });
     for (const sg of [-1, 1]) B(fg, .9, .22, .2, '#1a1b1d', [sg * 1.35 * W, -.7, .5], [0, 0, sg * -.5], { round: .05 });            // Atemschlitze
   }

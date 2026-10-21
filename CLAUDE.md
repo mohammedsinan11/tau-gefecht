@@ -44,7 +44,8 @@ UI und Texte sind **Deutsch**. Der Besitzer will vor allem ein **hochwertiges, s
 - Balance ausgeglichen (zuletzt 800 Partien: Einheiten 44,5–59 %, Crisis Schild etwas stark, Broadside etwas schwach; Auslöschungen 40 %). Befehlspunkte/Taktiken, Abwehrfeuer, 3 Missionen, 3 KI-Stufen,
   3 Geländeaufstellungen (Ruinenfeld, Depot, Trümmerstadt, je auch gespiegelt), Überspringen per Leertaste, Online-Mehrspieler (Link/Code, PeerJS), Initiative, Revanche, Endstatistik, Porträts.
 - Tester-Noten zuletzt: Einstieg 8, Bedienung 7, Taktik 7, Tempo 6, KI 5, Balance 7, Optik 9, Wiederspielwert 7, Stabilität 8, Gesamt 7,5.
-- Gutachter-Noten Figuren: Crisis rot 8/8/8, Stealth 7/6/7, Fire Warrior 8/7/7, Katze 6/6/7, Pathfinder 6/6/7, Crisis blau 7/6/7, Broadside 7/7/7.
+- Gutachter-Noten Figuren: Crisis rot 8/8/8, Stealth 8/7/8, Fire Warrior 8/7/7, Katze 6/6/7, Pathfinder 7/7/7, Crisis blau 7/7/7, Broadside 7/7/7.
+  Nahansichten für Details: `FOCUS=x,y,z,r tools/render.sh …`.
 
 ## Offene Aufgaben (priorisiert)
 1. **KI weiter stärken**: „Schwer“ hat jetzt Vorausschau (eigener Zug → schlimmste Gegenantwort → Stellungsbewertung mit
@@ -54,8 +55,10 @@ UI und Texte sind **Deutsch**. Der Besitzer will vor allem ein **hochwertiges, s
    sichern, Abwehrfeuer einplanen, Sprint in die Vorausschau aufnehmen.
 2. Spieltempo: gestrafft + Überspringen (Leertaste/Klick auf Würfel); von einem Tester bestätigen lassen.
 3. Mehr Abwechslung: evtl. weitere Missionen/Taktiken; Auslöschungsquote (40 %) wieder Richtung 30–35 % bringen.
-4. Figuren: Pathfinder-Helm (klar abgesetzter Gesichtskeil statt Kugel), Katze (Vorderbeine schlanker mit Ellenbogen, Stirn rund,
-   Ohrstreifen nur außen), Crisis blau Schenkelschale kürzer, Stealth-Kopfbuckel als „Schnabel“.
+4. Figuren (Gutachter, Okt. 2026): Pathfinder – Übergang Kuppel→Gesichtskeil seitlich schließen (Wangenfase);
+   Katze – dunkler Strich am Ohransatz beim Fauchen (Durchdringung Ohr/Kopf), Ohren ~20 % niedriger mit runder Spitze;
+   Crisis blau – Kniekolben dicker mit Metallring, Schienbeinblock oben schmaler; Stealth – Schnabel-Oberseite mit Fase/Mittelkante,
+   Kreisembleme auf den Schulterscheiben.
 5. Mobil: kompakte Oberfläche (≤700 px breit oder ≤500 px hoch: ☰-Menü, Aktionsleiste unten, kompakte Karte), Touch mit
    Vorschau-Tipp + Bestätigungs-Tipp, Grafik „schnell“ als Vorgabe. Offen: Test auf echten Geräten (iOS Safari/Android Chrome),
    evtl. gedrehte Hochformat-Ansicht (Tisch längs), Aufstellung per Touch mit Vorschau.
