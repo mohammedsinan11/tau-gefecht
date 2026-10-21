@@ -668,11 +668,16 @@ function xv8(rig, k) {
     B(th, 5.6, 5.4, L1, D, [0, 0, L1 / 2]);
     for (let i = 0; i < 4; i++) B(th, 5.9, .55, 1, '#34363a', [0, -.6, L1 * (.22 + i * .17)], undefined, { round: .2 });
     // gewölbte Oberschenkelschale vorn/außen, mit dunkler Fuge und Randlinie
-    const tp = shell(th, [[L1 * .02, 3.4], [L1 * .14, 4.0], [L1 * .5, 3.8], [L1 * .82, 3.2], [L1 * .97, 2.4]], 1.3, k.thighPlate, [s * .7, 2.7, 0], [0, 0, 0], { arch: 2.2, bow: .9 });
-    for (const z of [L1 * .3, L1 * .62]) loftRing(tp, z, .1, D, Math.PI * .58, Math.PI * .92, 10, -.04);
-    B(th, 1.1, 5, L1 * .65, k.thighPlate, [s * 3.2, .6, L1 * .45]);
+    const tl = k.thighLen ?? 1;   // Anteil der Schenkellänge, den die Schale bedeckt (darunter bleibt die Kniemechanik frei)
+    const tp = shell(th, [[L1 * .02, 3.4], [L1 * .14, 4.0], [L1 * .5 * tl, 3.8], [L1 * .82 * tl, 3.2], [L1 * .97 * tl, 2.4]], 1.3, k.thighPlate, [s * .7, 2.7, 0], [0, 0, 0], { arch: 2.2, bow: .9 });
+    for (const z of [L1 * .3 * tl, L1 * .62 * tl]) loftRing(tp, z, .1, D, Math.PI * .58, Math.PI * .92, 10, -.04);
+    B(th, 1.1, 5, L1 * .65 * tl, k.thighPlate, [s * 3.2, .6, L1 * .45 * tl]);
     for (let i = 0; i < 2; i++) B(th, .3, 2.6, .4, '#1a1b1d', [s * 3.8, .6, L1 * (.35 + i * .2)], undefined, { round: 0 });
     B(th, .9, .9, L1 * .55, METAL, [0, -3, L1 * .5], undefined, { m: .5, r: .4 });
+    if (k.kneePiston) for (const dx of [-1.4, 1.4]) {   // freiliegende Kniemechanik unter der kurzen Schale: zwei Kolben vorn
+      C(th, .55, .55, L1 * .4, '#3a3d42', [dx, 2.2, L1 * .76], [Math.PI / 2, 0, 0], { seg: 12 });
+      C(th, .32, .32, L1 * .3, METAL, [dx, 2.2, L1 * .9], [Math.PI / 2, 0, 0], { seg: 10, m: .6, r: .35 });
+    }
     S(gk, 2.4, D, knee); C(gk, 2.3, 2.3, 5.4, '#3a3d42', knee, [0, 0, Math.PI / 2], { seg: 20 });
     // Schienbein: großer, nach unten schmaler werdender Panzer, Knieplatte, Akzent, Waden
     const sh = limb(gk, knee, ank), L2 = sh.len;
@@ -859,7 +864,7 @@ function longGun(w) {
 function crisisBlue() {
   const g = new THREE.Group(), tan = '#bba277', tan2 = '#a88f68';
   const k = { main: tan, main2: tan2, pad: tan, pad2: tan2, upper: '#33363b', dark: '#25262a',
-    knee: tan, shin: tan, shin2: tan2, shinAcc: tan, shinBand: '#25262a', calf: '#33363b', foot: tan, thighPlate: tan,
+    knee: tan, shin: tan, shin2: tan2, shinAcc: tan, shinBand: '#25262a', calf: '#33363b', foot: tan, thighPlate: tan, thighLen: .56, kneePiston: true,
     plate: '#3a3d42', head: '#2c2f33', eye: '#d0302a', antenna: true, headW: 5, port: false, lean: .22, twist: .28, slits: false, padL: '#2c2f33', emblem: '#c8232c',
     legs: { '-1': [[-5.2, 28, 0], [-9, 20, 10], [-10, 9, 5.5]], '1': [[5.2, 28, 0], [8.6, 17.8, -1.5], [9.8, 8.6, -11]] } };
   const rig = new Rig(g);
@@ -952,6 +957,7 @@ function cat() {
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${lin(st)}), str * ${amt});`);
   const F = fur('#8f877f', '#3a3532', 'vLP.y * 3.2 + vLP.x * .3 + sin(vLP.z * .4) * 1.2 + gn(vLP * .22) * 5.', .7), FT = fur('#8f877f', '#3a3532', '(vLP.x + vLP.z) * 1.7');
   const W = M('#e2dbcf', { r: .9 }), D = '#3a3532';
+  const FE = fur('#8f877f', '#3a3532', 'vLP.y * 3.2 + sin(vLP.x * .5) * 1.2 + gn(vLP * .22) * 5.', '.75 * (1. - smoothstep(-.6, .4, vLP.z))');   // Ohr: Streifen nur außen
   const bs = gradBase(g, 16, 3.5, '#77736d', '#5f5b56', '#43403c', 8);
   gravel(bs, R, 14, 3.5, 26, ['#6b6762', '#57534e', '#86817a'], .7);
   rig.joint('root', null, [0, 0, 0]);
@@ -997,13 +1003,13 @@ function cat() {
   // Kopf: fuchsartig, spitze Schnauze, schmale Augen, „M“ auf der Stirn, Schnurrhaare
   const h = rig.joint('head', 'body', [0, 24, 2.5]);
   // Kopf als Loft von hinten nach vorn: runder Hinterkopf, breite Wangen, spitz zulaufende Schnauze
-  loft(h, [
+  const head = loft(h, [
     { z: -4.6, w: .5, h: .5, hb: .5, y: 29.2 },
     { z: -3.6, w: 5.0, h: 4.8, hb: 4.0, y: 29.3, e: 2.1 },
     { z: -1.0, w: 7.0, h: 6.0, hb: 5.0, y: 29.2, e: 2.1 },
-    { z: 2.0, w: 7.6, h: 5.6, hb: 5.1, y: 28.9, e: 2.3 },
-    { z: 5.0, w: 6.6, h: 4.5, hb: 4.3, y: 28.7, e: 2.3 },
-    { z: 7.2, w: 4.6, h: 3.4, hb: 3.2, y: 28.4, e: 2.2 },
+    { z: 2.0, w: 7.6, h: 5.9, hb: 5.1, y: 28.9, e: 2.15 },
+    { z: 5.0, w: 6.6, h: 5.1, hb: 4.3, y: 28.7, e: 2.05 },
+    { z: 7.2, w: 4.6, h: 3.9, hb: 3.2, y: 28.4, e: 2.0 },
     { z: 8.7, w: 2.9, h: 2.2, hb: 2.1, y: 27.8, e: 2.1 },
     { z: 9.8, w: 2.0, h: 1.5, hb: 1.6, y: 27.4, e: 2.1 },
     { z: 10.5, w: .9, h: .8, hb: .8, y: 27.3 },
@@ -1025,12 +1031,16 @@ function cat() {
     for (let i = 0; i < 3; i++) rod(h, [s * 2, 27.2 - i * .4, 9.9], [s * 7.6, 27.6 - i * 1.1, 10.6], .07, '#e8e4dc');
     // Ohren an eigenem Gelenk (werden beim Fauchen angelegt)
     const e = rig.joint('ear' + sfx(s), 'head', [s * 4.05, 32.8, 1]);
-    K(e, 3.8, 9, F, [s * 5.4, 37, 1], [0, 0, s * -.32]);
-    K(e, 2.3, 6, '#c98d8f', [s * 5.2, 36.6, 2.2], [0, 0, s * -.32]);
-    K(e, .7, 2.6, W, [s * 6.5, 40.6, 1.2], [0, 0, s * -.32]);
+    K(e, 4.3, 7.8, FE, [s * 5.25, 35.6, 1], [0, 0, s * -.32]);
+    K(e, 2.7, 5.4, '#c98d8f', [s * 5.05, 35.4, 2.35], [0, 0, s * -.32]);
+    K(e, .65, 2.2, W, [s * 6.05, 38.9, 1.2], [0, 0, s * -.32]);
   }
-  for (const [a, b2] of [[[-2.2, 33.6], [-1.2, 35]], [[-1.2, 35], [0, 33.8]], [[0, 33.8], [1.2, 35]], [[1.2, 35], [2.2, 33.6]]])
-    seg(h, [a[0], a[1], 7.75 - Math.abs(a[0]) * .15], [b2[0], b2[1], 7.75 - Math.abs(b2[0]) * .15], .2, .3, D, { round: 0 });
+  // „M“ auf der Stirn als dunkle Linie direkt auf der Kopfoberfläche (x seitlich, z entlang der Stirn nach vorn-unten)
+  { const at = (x, z) => V(head.pt(z, Math.PI / 2 - x / 5.4, .04));
+    const M = [[-2.3, 7.0], [-1.2, 5.9], [0, 6.75], [1.2, 5.9], [2.3, 7.0]], pts = [];
+    for (let i = 0; i < M.length - 1; i++) for (let j = 0; j < 6; j++) { const f = j / 6; pts.push(at(M[i][0] + (M[i + 1][0] - M[i][0]) * f, M[i][1] + (M[i + 1][1] - M[i][1]) * f)); }
+    pts.push(at(...M.at(-1)));
+    mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'catmullrom', .1), 60, .17, 6, false), D, h); }
   S(h, .8, '#c77d84', [0, 28.4, 11.4], [1.3, .8, .8], undefined, { r: .4 });
   // Oberkiefer-Zähne und Rachen (sichtbar, wenn das Maul offen ist)
   S(h, 1.9, '#b0444f', [0, 25.9, 7.9], [1, .5, 1]);
@@ -1041,11 +1051,17 @@ function cat() {
   // Vorderbeine mit Pfoten und Krallen
   for (const s of [-1, 1]) {
     const fl = rig.joint('fleg' + sfx(s), 'body', [s * 3.2, 14, 5]);
-    { const lg = limb(fl, [s * 2.9, 15, 4.4], [s * 3.8, 1.6, 7.9]), L = lg.len;
-      loft(lg, [{ z: -1, w: .4, h: .4, hb: .4 }, { z: 0, w: 1.8, h: 2.1, hb: 1.8 }, { z: L * .3, w: 1.55, h: 1.8, hb: 1.5 },
-        { z: L * .7, w: 1.1, h: 1.2, hb: 1.05 }, { z: L, w: 1.15, h: 1.3, hb: 1.05 }, { z: L + .5, w: .3, h: .3, hb: .3 }], FL, [0, 0, 0], [0, 0, 0], { n: 28, sub: 4 }); }
-    S(fl, 2.6, W, [s * 3.2, 1.6, 8.6], [1.05, .62, 1.25]);
-    for (let i = 0; i < 3; i++) K(fl, .3, .9, '#d8d2c4', [s * 3.2 + (i - 1) * .9, 1.3, 11], [Math.PI / 2, 0, 0]);
+    // schlanker Oberarm schräg nach hinten-unten zum Ellenbogen (liegt am Brustkorb an), Unterarm fast senkrecht zur Pfote
+    const sh = [s * 2.9, 15, 4.8], elb = [s * 3.5, 8.8, 2.7], wr = [s * 3.7, 2.6, 6.4];
+    { const ua = limb(fl, sh, elb), L = ua.len;
+      loft(ua, [{ z: -1.2, w: .4, h: .4, hb: .4 }, { z: 0, w: 1.75, h: 2.0, hb: 1.8 }, { z: L * .45, w: 1.4, h: 1.6, hb: 1.5 },
+        { z: L, w: 1.15, h: 1.35, hb: 1.2 }, { z: L + .9, w: .3, h: .3, hb: .3 }], FL, [0, 0, 0], [0, 0, 0], { n: 28, sub: 4 }); }
+    S(fl, 1.25, FL, elb, [.95, 1, 1.15]);                                                    // Ellenbogen
+    { const fa = limb(fl, elb, wr), L = fa.len;
+      loft(fa, [{ z: -.4, w: .3, h: .3, hb: .3 }, { z: .3, w: 1.05, h: 1.2, hb: 1.05 }, { z: L * .5, w: .9, h: 1.0, hb: .9 },
+        { z: L * .88, w: .8, h: .85, hb: .8 }, { z: L, w: .9, h: .95, hb: .85 }, { z: L + .8, w: .3, h: .3, hb: .3 }], FL, [0, 0, 0], [0, 0, 0], { n: 28, sub: 4 }); }
+    S(fl, 2.25, W, [s * 3.3, 1.6, 7.7], [1.05, .62, 1.25]);
+    for (let i = 0; i < 3; i++) K(fl, .28, .8, '#d8d2c4', [s * 3.3 + (i - 1) * .8, 1.3, 9.9], [Math.PI / 2, 0, 0]);
   }
   // Schwanz in drei Gliedern; Kugeln an beiden Enden schließen die Fugen
   const curve = new THREE.CatmullRomCurve3([[0, 3, -9], [7, 2, -9.5], [13, 2, -5], [14, 2, 2], [11, 2.2, 8], [8, 3, 10]].map(V));
@@ -1092,7 +1108,7 @@ function cat() {
     d.body = [.3 * hiss, 0, 0];
     d.head = [-.3 * hiss, .05 * Math.sin(TAU * p), 0];
     d.jaw = [1.2 * hiss, 0, 0];
-    d.ear_L = [-.85 * hiss, 0, -.15 * hiss]; d.ear_R = [-.85 * hiss, 0, .15 * hiss];
+    d.ear_L = [-.4 * hiss, 0, -.75 * hiss]; d.ear_R = [-.4 * hiss, 0, .75 * hiss];   // Ohren seitlich angelegt („Flugzeugohren“)
     d.fleg_R = [-1.1 * swipe, 0, -.2 * swipe];
     for (let i = 1; i <= 3; i++) d['tail' + i] = [0, .45 * Math.sin(TAU * p * 2 - i * .9), 0];
     return d;
@@ -1215,10 +1231,12 @@ function stealth() {
     { z: 19.5, w: 5.1, h: 4.0, hb: 5.0, e: 2.8 },
     { z: 21.4, w: 5.4, h: 4.3, hb: 5.8, e: 3.0, y: -.2 },
     { z: 23.2, w: 5.0, h: 4.1, hb: 6.2, e: 3.0, y: -.6 },
-    { z: 24.6, w: 4.2, h: 3.4, hb: 5.8, e: 2.8, y: -.9 },
-    { z: 25.6, w: 3.0, h: 2.4, hb: 4.4, e: 2.5, y: -.9 },
-    { z: 26.2, w: 1.5, h: 1.2, hb: 2.2, e: 2.2, y: -.7 },
-    { z: 26.4, w: .15, h: .15, hb: .15, y: -.6 },
+    // oben vorn als überhängender „Schnabel“ nach vorn gezogen (Sensorfeld sitzt darunter)
+    { z: 24.6, w: 4.2, h: 3.4, hb: 6.6, e: 3.0, eb: 3.4, y: -.9 },
+    { z: 25.5, w: 3.3, h: 2.5, hb: 6.9, e: 2.8, eb: 3.8, y: -.9 },
+    { z: 26.2, w: 2.4, h: 1.5, hb: 6.4, e: 2.6, eb: 4.0, y: -.8 },
+    { z: 26.7, w: 1.4, h: .8, hb: 5.2, e: 2.4, eb: 3.6, y: -.6 },
+    { z: 26.9, w: .15, h: .15, hb: .15, y: -.5 },
   ], sd, [0, 0, 1.6], [-Math.PI / 2, 0, 0], { n: 56, sub: 5 });
   const F = -Math.PI / 2, BK = Math.PI / 2;     // Winkel: vorn / hinten
   // umlaufende Naht unter der Brust, Rückennaht, Schulterkanten
@@ -1232,13 +1250,12 @@ function stealth() {
     prism(cg, pts, .55, sd2, undefined, undefined, { cham: .45, bevel: .15 });
     outline(cg, cham(pts, .45).filter((_, i) => i % 2 === 0), .3);
   }
-  // eingelassenes Sensorfeld vorn am Kopfbuckel: dunkle Fläche, roter Sensor, Augenbraue, rote Kontur
-  const sg = onSurf(body, 24.2, F, -.05); sg.scale.set(.88, .72, .72);
+  // eingelassenes Sensorfeld unter dem Schnabel: dunkle Fläche, roter Sensor, rote Kontur
+  const sg = onSurf(body, 23.7, F, -.05); sg.scale.set(1.12, .9, .8);
   const sp = [[-1.9, -1.1], [1.9, -1.1], [1.5, 1.1], [-1.5, 1.1]];
   prism(sg, sp, .3, '#1d1d20', undefined, undefined, { cham: .35, bevel: .05 });
   S(sg, .55, red, [0, 0, .12], [1, 1, .45], undefined, { r: .2 });
   for (const s of [-1, 1]) S(sg, .22, '#6fc3ff', [s * 1.1, -.2, .12], [1, 1, .5], undefined, { r: .2 });
-  B(sg, 4.4, .55, .7, sd2, [0, 1.5, .2], [-.35, 0, 0], { round: .2 });
   outline(sg, sp, .12);
   // zwei kurze rote Antennen oben hinten
   for (const s of [-1, 1]) prism(t, [[-.4, 0], [.4, 0], [.2, 3.4], [-.2, 3]], .5, red, [s * 1.6, 22.3, -5.2], [-.6, 0, s * -.2], { bevel: .1, cham: .15 });
@@ -1434,16 +1451,27 @@ function tauHelmet(h0, k, o = {}) {
     { z: 3.35, w: .6, h: .25, hb: .85, y: 24.0, e: 2.6 },
     { z: 3.45, w: .1, h: .1, hb: .1, y: 23.9 },
   ].map(sh), c, [0, 0, 0], [0, 0, 0], { n: 48, sub: 5 });
+  // Gesichtskeil (o.wedge): flache, fünfeckige Platte, die schräg nach vorn-unten bis zum spitzen Kinn aus der Kuppel tritt
+  if (o.wedge) {
+    const W = o.wedge === true ? 1 : o.wedge, fg = new THREE.Group(); fg.position.set(0, 24.45, 2.75 * L + .75); fg.rotation.set(-1.0, 0, 0); fg.scale.setScalar(1.15); h0.add(fg);
+    prism(fg, [[-2.05 * W, 1.7], [2.05 * W, 1.7], [2.3 * W, .3], [1.25 * W, -1.6], [0, -2.35], [-1.25 * W, -1.6], [-2.3 * W, .3]], .9, cf, [0, 0, 0], undefined, { bevel: .22, cham: .35 });
+    prism(fg, [[-.18, 1.2], [.18, 1.2], [.18, -2.1], [0, -2.25], [-.18, -2.1]], .4, c2, [0, 0, .55], undefined, { bevel: .08, cham: .1 });   // Mittelgrat
+    B(fg, 3.3 * W, .5, .3, k.visor ?? '#2f3247', [0, .55, .5], undefined, { round: .1, r: .25 });                                      // Sichtschlitz
+    B(fg, 3.5 * W, .14, .2, o.band ?? c2, [0, .9, .55], undefined, { round: .05 });
+    for (const sg of [-1, 1]) B(fg, .9, .22, .2, '#1a1b1d', [sg * 1.35 * W, -.7, .5], [0, 0, sg * -.5], { round: .05 });            // Atemschlitze
+  }
   // Gesichtsplatte in eigener Farbe: etwas größere Schale nur über die Vorderseite
-  if (cf !== c) loft(h0, [
+  else if (cf !== c) loft(h0, [
     { z: 1.0, w: .1, h: .1, hb: .1, y: 24.6 }, { z: 1.4, w: 2.12, h: 1.4, hb: 2.02, y: 25.2, e: 3.0 }, { z: 2.1, w: 1.8, h: 1.0, hb: 2.0, y: 24.9, e: 3.2 },
     { z: 2.9, w: 1.25, h: .55, hb: 1.65, y: 24.4, e: 3.0 }, { z: 3.4, w: .62, h: .28, hb: .9, y: 24.0, e: 2.6 }, { z: 3.5, w: .1, h: .1, hb: .1, y: 23.9 }].map(sh), cf, [0, 0, 0], [0, 0, 0], { n: 48, sub: 4 });
   // Visier: dunkler, schmaler Schlitz quer über die Gesichtsschräge, mit hellem Rahmen
-  const vs = onSurf(hm, 2.05 * L, Math.PI / 2, 0);
-  B(vs, 3.1, .48, .34, k.visor ?? '#2f3247', [0, 0, .05], undefined, { round: .12, r: .25 });
-  B(vs, 3.3, .14, .2, c2, [0, .32, .08], undefined, { round: .05 });
-  loftLine(hm, -Math.PI / 2, -1.2, 3.1, .1, '#2a2b2e', 24, -.02);                 // Kinnnaht
-  for (const sgn of [-1, 1]) loftRing(hm, 1.0, .09, '#2a2b2e', Math.PI / 2 + sgn * .15, Math.PI / 2 + sgn * 1.45, 16, -.02);   // Gesichtskante
+  if (!o.wedge) {
+    const vs = onSurf(hm, 2.05 * L, Math.PI / 2, 0);
+    B(vs, 3.1, .48, .34, k.visor ?? '#2f3247', [0, 0, .05], undefined, { round: .12, r: .25 });
+    B(vs, 3.3, .14, .2, c2, [0, .32, .08], undefined, { round: .05 });
+    loftLine(hm, -Math.PI / 2, -1.2, 3.1, .1, '#2a2b2e', 24, -.02);                 // Kinnnaht
+    for (const sgn of [-1, 1]) loftRing(hm, 1.0, .09, '#2a2b2e', Math.PI / 2 + sgn * .15, Math.PI / 2 + sgn * 1.45, 16, -.02);   // Gesichtskante
+  }
   // Nackenschutz hinten unten
   side(h0, [[-3.3, 23.2], [-1.2, 23.3], [-1.3, 24.6], [-3.0, 25.0]], 4.4, c2, undefined, undefined, { bevel: .2, cham: .4 });
   // Sensorkapsel links mit drei Linsen, Halterung
@@ -1481,21 +1509,21 @@ function pathfinder() {
     mesh(new THREE.CylinderGeometry(3.3, 5.4, 7.6, 9, 2, true, t0, tl), cloth, rig.s('pelvis'), [0, 13.3, .2]).userData.noFx = true;
   B(rig.s('pelvis'), 6, .8, 4.2, '#3a2f22', [0, 17, .1], undefined, { round: .3 });
   // Helm: dunkel mit weißem Sichtband und rotem Zielsensor
-  tauHelmet(rig.s('head'), k, { color: '#2c2f52', color2: '#2c2f52', eye: true, long: 1.25 });
+  tauHelmet(rig.s('head'), k, { color: '#2c2f52', color2: '#2c2f52', face: '#353a66', band: '#d8d6cf', eye: true, long: .75, wedge: true });
   // Rail Rifle im Anschlag an der rechten Schulter, ca. 22° nach oben
   const w = trooperGun(rig, [-1.6, 22.2, 4.4], [9.6, 38.6, 30], railRifle, k);
   trooperArm(rig, k, -1, wpt(w, [0, -1.7, -.3]));
   trooperArm(rig, k, 1, wpt(w, [0, -1.5, 5.6]));
   // Antenne am Rückenmodul
   rig.j.root.position.y = -2.8;
-  rig.j.head.rotation.set(.12, -.2, 0);
+  rig.j.head.rotation.set(.12, .12, 0);
   rig.walk = { period: .9, stride: 4.6, lift: 1.6, bob: .4, sway: .1, armSwing: 0, rise: .9, extra: p => ({ gun: [.05 * Math.sin(Math.PI * 4 * p), .04 * Math.sin(Math.PI * 2 * p), 0] }) };
   rig.shoot = { period: 1.4 };
   const dir = V([9.6, 38.6, 30]).sub(V([-1.6, 22.2, 4.4])).toArray(), back = V(dir).normalize().multiplyScalar(-1.4).toArray();
   rig.kicks.push({ joint: 'gun', at: 0, pos: back, lift: [dir, .17], torso: .14, decay: 5 }, { joint: 'shoulder_R', at: 0, lift: [dir, .14], decay: 5 },
     { joint: 'shoulder_L', at: 0, lift: [dir, .14], decay: 5 }, { joint: 'head', at: 0, rot: [-.14, 0, 0], decay: 5 });
   rig.j.torso.rotation.set(.3, -.15, 0);
-  rig.j.head.rotation.x += .3;
+  rig.j.head.rotation.x += .18;
   rig.finalize();
   return g;
 }

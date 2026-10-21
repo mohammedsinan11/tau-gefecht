@@ -149,6 +149,8 @@ if (SHEET) {
   const rig = rigOf(current), clip = ANIM && rig?.clips.find(c => c.name === ANIM);
   const box = new THREE.Box3().setFromObject(current.group);
   const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+  // Nahansicht: &focus=x,y,z,r (Mittelpunkt und Radius in Modell-Einheiten), z. B. für Köpfe
+  const FOC = q.get('focus')?.split(',').map(Number); if (FOC?.length === 4) { c.set(FOC[0], FOC[1], FOC[2]); size.setScalar(FOC[3] * 2); }
   // Schießen: Zeitpunkte rund um den ersten Rückstoß; Gehen: gleichmäßig über den Zyklus
   const times = ANIM === 'Schiessen' ? [0, .05, .14, .4] : [0, .25, .5, .75].map(f => f * (clip?.duration ?? 1));
   const views = clip ? times.map(t => [.75, .2, .65, `${ANIM} t=${t.toFixed(2)}s`, t])

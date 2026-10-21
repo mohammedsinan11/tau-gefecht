@@ -49,10 +49,12 @@ function stealth() {
     { z: 19.5, w: 5.1, h: 4.0, hb: 5.0, e: 2.8 },
     { z: 21.4, w: 5.4, h: 4.3, hb: 5.8, e: 3.0, y: -.2 },
     { z: 23.2, w: 5.0, h: 4.1, hb: 6.2, e: 3.0, y: -.6 },
-    { z: 24.6, w: 4.2, h: 3.4, hb: 5.8, e: 2.8, y: -.9 },
-    { z: 25.6, w: 3.0, h: 2.4, hb: 4.4, e: 2.5, y: -.9 },
-    { z: 26.2, w: 1.5, h: 1.2, hb: 2.2, e: 2.2, y: -.7 },
-    { z: 26.4, w: .15, h: .15, hb: .15, y: -.6 },
+    // oben vorn als überhängender „Schnabel“ nach vorn gezogen (Sensorfeld sitzt darunter)
+    { z: 24.6, w: 4.2, h: 3.4, hb: 6.6, e: 3.0, eb: 3.4, y: -.9 },
+    { z: 25.5, w: 3.3, h: 2.5, hb: 6.9, e: 2.8, eb: 3.8, y: -.9 },
+    { z: 26.2, w: 2.4, h: 1.5, hb: 6.4, e: 2.6, eb: 4.0, y: -.8 },
+    { z: 26.7, w: 1.4, h: .8, hb: 5.2, e: 2.4, eb: 3.6, y: -.6 },
+    { z: 26.9, w: .15, h: .15, hb: .15, y: -.5 },
   ], sd, [0, 0, 1.6], [-Math.PI / 2, 0, 0], { n: 56, sub: 5 });
   const F = -Math.PI / 2, BK = Math.PI / 2;     // Winkel: vorn / hinten
   // umlaufende Naht unter der Brust, Rückennaht, Schulterkanten
@@ -66,13 +68,12 @@ function stealth() {
     prism(cg, pts, .55, sd2, undefined, undefined, { cham: .45, bevel: .15 });
     outline(cg, cham(pts, .45).filter((_, i) => i % 2 === 0), .3);
   }
-  // eingelassenes Sensorfeld vorn am Kopfbuckel: dunkle Fläche, roter Sensor, Augenbraue, rote Kontur
-  const sg = onSurf(body, 24.2, F, -.05); sg.scale.set(.88, .72, .72);
+  // eingelassenes Sensorfeld unter dem Schnabel: dunkle Fläche, roter Sensor, rote Kontur
+  const sg = onSurf(body, 23.7, F, -.05); sg.scale.set(1.12, .9, .8);
   const sp = [[-1.9, -1.1], [1.9, -1.1], [1.5, 1.1], [-1.5, 1.1]];
   prism(sg, sp, .3, '#1d1d20', undefined, undefined, { cham: .35, bevel: .05 });
   S(sg, .55, red, [0, 0, .12], [1, 1, .45], undefined, { r: .2 });
   for (const s of [-1, 1]) S(sg, .22, '#6fc3ff', [s * 1.1, -.2, .12], [1, 1, .5], undefined, { r: .2 });
-  B(sg, 4.4, .55, .7, sd2, [0, 1.5, .2], [-.35, 0, 0], { round: .2 });
   outline(sg, sp, .12);
   // zwei kurze rote Antennen oben hinten
   for (const s of [-1, 1]) prism(t, [[-.4, 0], [.4, 0], [.2, 3.4], [-.2, 3]], .5, red, [s * 1.6, 22.3, -5.2], [-.6, 0, s * -.2], { bevel: .1, cham: .15 });
